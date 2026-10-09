@@ -1,6 +1,6 @@
 import { useDataset } from '../datasets/dataset'
 import { formatTime } from '../lib/util'
-import { RESULTS, type Finish, type Result } from './useQuizRun'
+import { pct, RESULTS, scoreOf, type Finish, type Result } from './useQuizRun'
 
 type Props = {
   ids: string[]
@@ -9,9 +9,7 @@ type Props = {
   onRestart: (ids?: string[]) => void
 }
 
-const pct = (n: number, total: number) => Math.round((n / total) * 100)
-
-/** Colour key for the result fills, shown under quiz maps. */
+/** Color key for the result fills, shown under quiz maps. */
 export function ResultLegend() {
   return (
     <div className="legend result-legend">
@@ -24,7 +22,8 @@ export function ResultLegend() {
   )
 }
 
-export function Summary({ ids, results, finish, onRestart }: Props) {
+/** Stacked bar plus a row per result (1st/2nd/3rd try, didn't get) with counts, % and names. */
+export function ResultBreakdown({ ids, results }: { ids: string[]; results: Record<string, Result> }) {
   const ds = useDataset()
   const byResult = Object.fromEntries(
     RESULTS.map((r) => [
@@ -32,21 +31,10 @@ export function Summary({ ids, results, finish, onRestart }: Props) {
       ids.filter((id) => results[id] === r.id).sort((a, b) => ds.byId[a].name.localeCompare(ds.byId[b].name)),
     ]),
   ) as Record<Result, string[]>
-
   const total = ids.length
-  const firstPct = pct(byResult.first.length, total)
-  const gotPct = pct(total - byResult.missed.length, total)
-  const notFirst = ids.filter((id) => results[id] !== 'first')
 
   return (
-    <div className="summary">
-      <h2>{firstPct === 100 ? 'Perfect!' : firstPct >= 80 ? 'Great job!' : 'Run complete'}</h2>
-      <p className="score">
-        <strong>{firstPct}%</strong> on the first try · {gotPct}% within {RESULTS.length - 1} tries ·{' '}
-        {formatTime(finish.ms)}
-        {finish.newBest && <span className="pill good">New best</span>}
-      </p>
-
+    <>
       <div className="stack-bar" role="img" aria-label="Results breakdown">
         {RESULTS.map((r) =>
           byResult[r.id].length ? (
@@ -75,10 +63,28 @@ export function Summary({ ids, results, finish, onRestart }: Props) {
           ))}
         </tbody>
       </table>
+    </>
+  )
+}
+
+export function Summary({ ids, results, finish, onRestart }: Props) {
+  const { firstPct, gotPct } = scoreOf(ids, results)
+  const notFirst = ids.filter((id) => results[id] !== 'first')
+
+  return (
+    <div className="summary">
+      <h2>{firstPct === 100 ? 'Perfect!' : firstPct >= 80 ? 'Great job!' : 'Run complete'}</h2>
+      <p className="score">
+        <strong>{firstPct}%</strong> on the first try · {gotPct}% within {RESULTS.length - 1} tries ·{' '}
+        {formatTime(finish.ms)}
+        {finish.newBest && <span className="pill good">New best</span>}
+      </p>
+
+      <ResultBreakdown ids={ids} results={results} />
 
       <div className="actions">
         {notFirst.length > 0 && (
-          <button onClick={() => onRestart(notFirst)}>Practise the {notFirst.length} not got first try</button>
+          <button onClick={() => onRestart(notFirst)}>Practice the {notFirst.length} you didn't get on the first try</button>
         )}
         <button className={notFirst.length > 0 ? 'ghost' : ''} onClick={() => onRestart()}>
           Play again

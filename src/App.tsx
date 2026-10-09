@@ -5,12 +5,14 @@ import { ExploreMode } from './modes/ExploreMode'
 import { FindMode } from './modes/FindMode'
 import { NameMode } from './modes/NameMode'
 import { DragMode } from './modes/DragMode'
+import { HistoryMode } from './modes/HistoryMode'
 
 const MODES = [
   { id: 'explore', label: 'Explore', Component: ExploreMode },
   { id: 'find', label: 'Find it', Component: FindMode },
   { id: 'name', label: 'Name it', Component: NameMode },
   { id: 'drag', label: 'Drag & drop', Component: DragMode },
+  { id: 'history', label: 'History', Component: HistoryMode },
 ] as const
 
 type ModeId = (typeof MODES)[number]['id']
@@ -20,20 +22,21 @@ export default function App() {
   const [mode, setMode] = useState<ModeId>('explore')
   const [loaded, setLoaded] = useState<LoadedDataset | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Bumped when progress is reset: remounts the other tabs so no in-progress run writes old answers back.
+  const [resetCount, setResetCount] = useState(0)
 
   useEffect(() => {
-    let cancelled = false
+    let canceled = false
     const config = DATASETS.find((d) => d.id === datasetId)!
     loadDataset(config)
-      .then((ds) => !cancelled && setLoaded(ds))
-      .catch((e: unknown) => !cancelled && setError(String(e)))
+      .then((ds) => !canceled && setLoaded(ds))
+      .catch((e: unknown) => !canceled && setError(String(e)))
     return () => {
-      cancelled = true
+      canceled = true
     }
   }, [datasetId])
 
   const ready = loaded?.config.id === datasetId ? loaded : null
-  const Mode = MODES.find((m) => m.id === mode)!.Component
 
   return (
     <div className="app">
@@ -62,7 +65,17 @@ export default function App() {
           <p className="error">Couldn't load the map: {error}</p>
         ) : ready ? (
           <DatasetContext.Provider value={ready}>
-            <Mode key={`${datasetId}-${mode}`} />
+            {/* Every tab stays mounted (just hidden) so switching tabs keeps quiz progress.
+                Explore, where reset happens, keeps its view; every other tab starts fresh after a reset. */}
+            {MODES.map(({ id, Component }) => (
+              <div
+                key={id === 'explore' ? `${datasetId}-${id}` : `${datasetId}-${id}-${resetCount}`}
+                hidden={mode !== id}
+                role="tabpanel"
+              >
+                <Component active={mode === id} onProgressReset={() => setResetCount((n) => n + 1)} />
+              </div>
+            ))}
           </DatasetContext.Provider>
         ) : (
           <p className="muted">Loading map…</p>

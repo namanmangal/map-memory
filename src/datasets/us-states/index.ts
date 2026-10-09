@@ -13,7 +13,7 @@ const usStates: DatasetConfig = {
   // Pre-projected (Albers USA) to a 975×610 canvas; extra room on the right for callouts.
   viewBox: '-62 6 1086 604',
   labelOverrides: {
-    '12': [800, 540], // Florida: centre of the peninsula
+    '12': [800, 540], // Florida: center of the peninsula
     '26': [690, 190], // Michigan: lower peninsula
     '22': [565, 482], // Louisiana
     '15': [292, 552], // Hawaii
@@ -29,6 +29,7 @@ const usStates: DatasetConfig = {
     width: 48,
     height: 20,
   },
+  insets: ['02', '15'], // Alaska, Hawaii
   loadTopology: () => import('us-atlas/states-albers-10m.json').then((m) => m.default as unknown as Topology),
   loadPlaces: () => import('./places.json').then((m) => m.default as Place[]),
 }

@@ -17,6 +17,7 @@
   --third: #e8772e;
   --bad: #d64545;
   --target: #2f5bd3;
+  --target-hover: #1f3f9e;
   --unseen: #c9c4b8;
 
   --radius: 10px;
@@ -49,6 +50,7 @@
     --third: #f08a45;
     --bad: #e86060;
     --target: #7c9cf0;
+    --target-hover: #a9c0fa;
     --unseen: #57534b;
   }
 }
@@ -201,6 +203,25 @@ h1 {
   color: var(--muted);
 }
 
+.timer {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.timer .pause {
+  padding: 2px 10px;
+  font-size: 0.85rem;
+}
+
+/* Name it already pushes its Type/Choose toggle right; keep the timer beside it. */
+.segmented + .timer {
+  margin-left: 0;
+}
+
 /* ---------- Map ---------- */
 
 .map {
@@ -239,6 +260,12 @@ h1 {
 .place.selected,
 .place.target {
   fill: var(--target);
+}
+
+/* Hovering the selected place deepens its color instead of dropping back to the plain hover fill. */
+.place.selected:hover,
+.place.selected.hoverable:hover {
+  fill: var(--target-hover);
 }
 
 .place.first,
@@ -287,6 +314,17 @@ h1 {
 .place.selected[class*='m-'] {
   stroke: var(--text);
   stroke-width: 2;
+}
+
+.hit-area {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.inset-panel {
+  fill: var(--surface);
+  stroke: var(--border);
+  vector-effect: non-scaling-stroke;
 }
 
 .leader {
@@ -430,6 +468,7 @@ h1 {
 
 .info dt {
   color: var(--muted);
+  white-space: nowrap;
 }
 
 .info dd {
@@ -443,6 +482,30 @@ h1 {
   letter-spacing: 0.05em;
   color: var(--muted);
   margin: 12px 0 4px;
+}
+
+.info .back-to-all {
+  align-self: flex-start;
+  text-decoration: none;
+}
+
+.info .back-to-all:hover {
+  text-decoration: underline;
+}
+
+.region-link {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+}
+
+.region-link:hover,
+.region-link[aria-pressed='true'] {
+  color: var(--accent);
 }
 
 .info .list ul {
@@ -503,7 +566,7 @@ h1 {
   padding: 3px 10px;
 }
 
-/* ---------- Result colours ---------- */
+/* ---------- Result colors ---------- */
 
 .result-legend {
   margin-top: 8px;
@@ -750,6 +813,75 @@ h1 {
 
 .error {
   color: var(--bad);
+}
+
+/* ---------- History ---------- */
+
+.history.empty {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  max-width: 560px;
+}
+
+.history.empty h2 {
+  margin: 0 0 6px;
+}
+
+.history .totals {
+  margin-left: auto;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.runs {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.runs th,
+.runs td {
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.runs thead th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.runs .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.runs tr.run {
+  cursor: pointer;
+}
+
+.runs tr.run:hover,
+.runs tr.run.open {
+  background: var(--accent-soft);
+}
+
+.runs tr.run-details td {
+  white-space: normal;
+  padding: 4px 14px 16px;
+}
+
+.runs tr.run-details .breakdown {
+  margin-bottom: 0;
 }
 
 /* ---------- Small screens ---------- */

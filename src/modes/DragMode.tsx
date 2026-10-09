@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useDataset } from '../datasets/dataset'
 import { MapView } from '../map/MapView'
-import { QuizShell, type GameProps } from './QuizShell'
+import { QuizShell, type GameProps, type ModeProps } from './QuizShell'
+import { QuizPaused, QuizStart } from './QuizStart'
+import { QuizTimer } from './QuizTimer'
 import { ResultLegend, Summary } from './Summary'
 import { MAX_ATTEMPTS, resultFor, useQuizRun } from './useQuizRun'
 
 /** All names in a tray — drag each onto its outline. Tap a name then tap the map also works. */
-export function DragMode() {
-  return <QuizShell mode="drag" render={(props) => <DragGame {...props} />} />
+export function DragMode({ active }: ModeProps) {
+  return <QuizShell mode="drag" active={active} render={(props) => <DragGame {...props} />} />
 }
 
 type Drag = { id: string; x: number; y: number; startX: number; startY: number; moved: boolean }
@@ -18,9 +20,15 @@ function placeAt(x: number, y: number): string | null {
   return el?.getAttribute('data-place-id') ?? null
 }
 
-function DragGame({ ids, focusIds, bestKey, onRestart }: GameProps) {
+function DragGame({ ids, focusIds, bestKey, onRestart, active: tabActive, autoStart, meta }: GameProps) {
   const ds = useDataset()
-  const { results, resolve, finish } = useQuizRun(ids, bestKey)
+  const { started, begin, paused, pauseReason, pause, resume, live, running, results, resolve, finish, elapsed } = useQuizRun(
+    ids,
+    bestKey,
+    tabActive,
+    autoStart,
+    meta,
+  )
   const [mistakes, setMistakes] = useState<Record<string, number>>({})
   const [drag, setDrag] = useState<Drag | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
@@ -43,7 +51,8 @@ function DragGame({ ids, focusIds, bestKey, onRestart }: GameProps) {
   }, [shake])
 
   const place = (nameId: string, targetId: string | null) => {
-    if (!targetId || results[targetId]) return
+    // Not before starting or while paused — a paused click mustn't count as a mistake (or unlock the hint).
+    if (!live || !targetId || results[targetId]) return
     if (nameId === targetId) {
       resolve(nameId, resultFor(mistakes[nameId] ?? 0))
       setFlash({ id: targetId, ok: true })
@@ -66,6 +75,17 @@ function DragGame({ ids, focusIds, bestKey, onRestart }: GameProps) {
   const updateDrag = (d: Drag | null) => {
     dragRef.current = d
     setDrag(d)
+  }
+
+  // Pausing (including by leaving the window mid-drag) drops whatever name is being dragged.
+  const [wasPaused, setWasPaused] = useState(paused)
+  if (paused !== wasPaused) {
+    setWasPaused(paused)
+    if (paused) {
+      // Clearing the drag also removes its window listeners, so the stale ref is never read.
+      setDrag(null)
+      setOverId(null)
+    }
   }
 
   useEffect(() => {
@@ -105,6 +125,8 @@ function DragGame({ ids, focusIds, bestKey, onRestart }: GameProps) {
   const hintId = active && (mistakes[active] ?? 0) >= MAX_ATTEMPTS ? active : null
 
   const classFor = (id: string) => {
+    // While paused, show only placed states — the hint pulse would give the answer away.
+    if (paused) return results[id]
     if (flash?.id === id) return flash.ok ? 'just-placed' : 'wrong'
     if (results[id]) return results[id]
     if (id === hintId) return 'pulse'
@@ -115,7 +137,9 @@ function DragGame({ ids, focusIds, bestKey, onRestart }: GameProps) {
   return (
     <div className="game drag-game">
       <div className="prompt">
-        {!finish && (
+        {!started && <QuizStart count={ids.length} onStart={begin} />}
+        {paused && <QuizPaused elapsed={elapsed()} reason={pauseReason} onResume={resume} />}
+        {live && !finish && (
           <>
             <span className="muted">
               {ids.length - remaining.length} of {ids.length} placed
@@ -130,6 +154,7 @@ function DragGame({ ids, focusIds, bestKey, onRestart }: GameProps) {
               )}
             </span>
             <span className="feedback">{hintId && 'Stuck? The right spot is flashing.'}</span>
+            <QuizTimer elapsed={elapsed} running={running} onPause={pause} />
           </>
         )}
       </div>
@@ -143,7 +168,7 @@ function DragGame({ ids, focusIds, bestKey, onRestart }: GameProps) {
           labelFor={(id) => (results[id] ? ds.byId[id].code : undefined)}
           onPick={(id) => selected && place(selected, id)}
         />
-        {!finish && (
+        {live && !finish && (
           <ul className="tray" aria-label={`${ds.config.noun.many} to place`}>
             {remaining.map((id) => (
               <li

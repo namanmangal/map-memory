@@ -9,6 +9,7 @@ export type Shape = {
   label: [number, number]
   /** [x0, y0, x1, y1] in map coordinates */
   bounds: Bounds
+  area: number
 }
 
 export type Bounds = [number, number, number, number]
@@ -34,7 +35,7 @@ export function buildMap(config: DatasetConfig, topology: Topology, places: Plac
       const id = String(f.id)
       const [x, y] = path.centroid(f)
       const [[x0, y0], [x1, y1]] = path.bounds(f)
-      return { id, d: path(f) ?? '', label: config.labelOverrides?.[id] ?? [x, y], bounds: [x0, y0, x1, y1] }
+      return { id, d: path(f) ?? '', label: config.labelOverrides?.[id] ?? [x, y], bounds: [x0, y0, x1, y1], area: path.area(f) }
     })
 
   const shapeById: Record<string, Shape> = Object.fromEntries(shapes.map((s) => [s.id, s]))

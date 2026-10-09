@@ -40,6 +40,11 @@ export type DatasetConfig = {
   /** Hand-tuned label positions where the geometric centroid looks off */
   labelOverrides?: Record<string, [number, number]>
   callouts?: CalloutLayout
+  /**
+   * Places drawn as insets far from their real position (e.g. Alaska, Hawaii).
+   * When a zoomed region includes them, they're moved into a corner of the view.
+   */
+  insets?: string[]
   loadTopology: () => Promise<Topology>
   loadPlaces: () => Promise<Place[]>
 }

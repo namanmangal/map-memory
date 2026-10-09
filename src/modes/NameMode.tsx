@@ -2,24 +2,39 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { useDataset, type LoadedDataset } from '../datasets/dataset'
 import { MapView } from '../map/MapView'
 import { levenshtein, normalize, shuffle } from '../lib/util'
-import { QuizShell, type GameProps } from './QuizShell'
+import { QuizShell, type GameProps, type ModeProps } from './QuizShell'
+import { QuizPaused, QuizStart } from './QuizStart'
+import { QuizTimer } from './QuizTimer'
 import { ResultLegend, Summary } from './Summary'
 import { MAX_ATTEMPTS, resultFor, useQuizRun } from './useQuizRun'
 
 type InputStyle = 'type' | 'choose'
 
-/** A place is highlighted — type or pick its name. */
-export function NameMode() {
+const STYLES: InputStyle[] = ['type', 'choose']
+
+/**
+ * A place is highlighted — type or pick its name. Type and Choose are separate quizzes,
+ * each with its own region, progress, timer and best score; both stay mounted so
+ * switching between them doesn't lose either run.
+ */
+export function NameMode({ active }: ModeProps) {
   const [style, setStyle] = useState<InputStyle>('type')
   return (
-    <QuizShell
-      mode={`name-${style}`}
-      render={(props) => <NameGame {...props} style={style} onStyle={setStyle} />}
-    />
+    <>
+      {STYLES.map((s) => (
+        <div key={s} hidden={style !== s}>
+          <QuizShell
+            mode={`name-${s}`}
+            active={active && style === s}
+            render={(props) => <NameGame {...props} style={s} onStyle={setStyle} />}
+          />
+        </div>
+      ))}
+    </>
   )
 }
 
-/** Three wrong options drawn from the nearest neighbours, so the choice isn't trivial. */
+/** Three wrong options drawn from the nearest neighbors, so the choice isn't trivial. */
 function choicesFor(ds: LoadedDataset, id: string): string[] {
   const nearby = ds.places
     .map((p) => p.id)
@@ -43,13 +58,22 @@ function NameGame({
   ids,
   focusIds,
   bestKey,
+  active,
+  autoStart,
+  meta,
   onRestart,
   style,
   onStyle,
 }: GameProps & { style: InputStyle; onStyle: (s: InputStyle) => void }) {
   const ds = useDataset()
   const [queue] = useState(() => shuffle(ids))
-  const { results, resolve, finish, done } = useQuizRun(ids, bestKey)
+  const { started, begin, paused, pauseReason, pause, resume, live, running, results, resolve, finish, elapsed, done } = useQuizRun(
+    ids,
+    bestKey,
+    active,
+    autoStart,
+    meta,
+  )
   const [mistakes, setMistakes] = useState(0)
   const [wrongChoices, setWrongChoices] = useState<string[]>([])
   const [typed, setTyped] = useState('')
@@ -59,12 +83,14 @@ function NameGame({
   const revealed = mistakes >= MAX_ATTEMPTS
   const choices = useMemo(() => (current ? choicesFor(ds, current) : []), [ds, current])
 
-  const advance = () => {
+  /** Moves to the next place. `note` is feedback carried over about the answer just given (e.g. "✓ Ohio"); nothing else from this place is. */
+  const advance = (note = '') => {
     if (!current) return
     resolve(current, resultFor(mistakes))
     setMistakes(0)
     setWrongChoices([])
     setTyped('')
+    setNote(note)
   }
 
   const miss = () => setMistakes((m) => m + 1)
@@ -72,8 +98,7 @@ function NameGame({
   const choose = (id: string) => {
     if (!current || revealed) return
     if (id === current) {
-      setNote(`✓ ${ds.byId[current].name}`)
-      advance()
+      advance(`✓ ${ds.byId[current].name}`)
     } else {
       setWrongChoices((w) => [...w, id])
       setNote('')
@@ -93,17 +118,39 @@ function NameGame({
       setTyped('')
       miss()
     } else {
-      setNote(result === 'typo' ? `✓ Close enough — it's spelled ${place.name}` : `✓ ${place.name}`)
-      advance()
+      advance(result === 'typo' ? `✓ Close enough — it's spelled ${place.name}` : `✓ ${place.name}`)
     }
   }
 
-  const classFor = (id: string) => (id === current ? 'target' : results[id])
+  // Before starting, and while paused, don't highlight the current question.
+  const classFor = (id: string) => (!started ? undefined : id === current && live ? 'target' : results[id])
+
+  // Available before starting too, so you can pick how to answer first.
+  const styleToggle = (
+    <span className="segmented">
+      <button className={style === 'type' ? 'on' : ''} onClick={() => onStyle('type')}>
+        Type
+      </button>
+      <button className={style === 'choose' ? 'on' : ''} onClick={() => onStyle('choose')}>
+        Choose
+      </button>
+    </span>
+  )
 
   return (
     <div className="game">
       <div className="prompt" aria-live="polite">
-        {!finish && current && (
+        {!started && (
+          <QuizStart count={ids.length} onStart={begin}>
+            {styleToggle}
+          </QuizStart>
+        )}
+        {paused && (
+          <QuizPaused elapsed={elapsed()} reason={pauseReason} onResume={resume}>
+            {styleToggle}
+          </QuizPaused>
+        )}
+        {live && !finish && current && (
           <>
             <span className="muted">
               {done + 1} of {ids.length}
@@ -111,19 +158,13 @@ function NameGame({
             <span className="ask">
               Which {ds.config.noun.one} is highlighted?
             </span>
-            <span className="segmented">
-              <button className={style === 'type' ? 'on' : ''} onClick={() => onStyle('type')}>
-                Type
-              </button>
-              <button className={style === 'choose' ? 'on' : ''} onClick={() => onStyle('choose')}>
-                Choose
-              </button>
-            </span>
+            {styleToggle}
+            <QuizTimer elapsed={elapsed} running={running} onPause={pause} />
           </>
         )}
       </div>
 
-      {!finish && current && (
+      {live && !finish && current && (
         <div className="answer">
           {style === 'choose' ? (
             <div className="choices">
@@ -157,7 +198,7 @@ function NameGame({
             {revealed ? (
               <>
                 It's <strong>{ds.byId[current].name}</strong>.{' '}
-                {style === 'choose' && <button onClick={advance}>Next</button>}
+                {style === 'choose' && <button onClick={() => advance()}>Next</button>}
               </>
             ) : (
               <>
