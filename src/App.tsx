@@ -6,6 +6,7 @@ import { FindMode } from './modes/FindMode'
 import { NameMode } from './modes/NameMode'
 import { DragMode } from './modes/DragMode'
 import { HistoryMode } from './modes/HistoryMode'
+import { setMuted, useMuted } from './lib/sound'
 
 const MODES = [
   { id: 'explore', label: 'Explore', Component: ExploreMode },
@@ -24,6 +25,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   // Bumped when progress is reset: remounts the other tabs so no in-progress run writes old answers back.
   const [resetCount, setResetCount] = useState(0)
+  const muted = useMuted()
 
   useEffect(() => {
     let canceled = false
@@ -58,6 +60,15 @@ export default function App() {
             </button>
           ))}
         </nav>
+        <button
+          className="sound-toggle"
+          aria-pressed={muted}
+          aria-label={muted ? 'Turn sounds on' : 'Mute sounds'}
+          title={muted ? 'Sounds off — click to turn on' : 'Sounds on — click to mute'}
+          onClick={() => setMuted(!muted)}
+        >
+          {muted ? '🔇' : '🔊'}
+        </button>
       </header>
 
       <main>

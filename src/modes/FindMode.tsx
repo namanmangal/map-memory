@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useDataset } from '../datasets/dataset'
 import { MapView } from '../map/MapView'
+import { playSound } from '../lib/sound'
 import { shuffle } from '../lib/util'
 import { QuizShell, type GameProps, type ModeProps } from './QuizShell'
 import { QuizPaused, QuizStart } from './QuizStart'
@@ -38,10 +39,13 @@ function FindGame({ ids, focusIds, bestKey, onRestart, active, autoStart, meta }
   const pick = (id: string) => {
     if (!live || !current || results[id]) return
     if (id === current) {
+      // No chime for clicking the flashing answer after three misses.
+      if (!revealed) playSound('correct')
       resolve(current, resultFor(mistakes))
       setMistakes(0)
       setWrongId(null)
     } else if (!revealed) {
+      playSound('wrong')
       setMistakes((m) => m + 1)
       setWrongId(id)
     }

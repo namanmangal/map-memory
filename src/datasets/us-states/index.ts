@@ -1,5 +1,5 @@
 import type { Topology } from 'topojson-specification'
-import type { DatasetConfig, Place } from '../types'
+import type { DatasetConfig, Place, PlaceImage } from '../types'
 
 // Ids are FIPS codes, which is what us-atlas uses. They skip numbers (03, 07, 11=DC, 14, 43, 52),
 // so the 50 states run from 01 to 56.
@@ -32,6 +32,8 @@ const usStates: DatasetConfig = {
   insets: ['02', '15'], // Alaska, Hawaii
   loadTopology: () => import('us-atlas/states-albers-10m.json').then((m) => m.default as unknown as Topology),
   loadPlaces: () => import('./places.json').then((m) => m.default as Place[]),
+  // Flower, bird and landmark photos from Wikimedia Commons, verified against Wikipedia's state lists.
+  loadImages: () => import('./images.json').then((m) => m.default as Record<string, PlaceImage[]>),
 }
 
 export default usStates

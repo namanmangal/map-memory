@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useDataset } from '../datasets/dataset'
+import { playSound } from '../lib/sound'
 import { MapView } from '../map/MapView'
 import { QuizShell, type GameProps, type ModeProps } from './QuizShell'
 import { QuizPaused, QuizStart } from './QuizStart'
@@ -54,10 +55,12 @@ function DragGame({ ids, focusIds, bestKey, onRestart, active: tabActive, autoSt
     // Not before starting or while paused — a paused click mustn't count as a mistake (or unlock the hint).
     if (!live || !targetId || results[targetId]) return
     if (nameId === targetId) {
+      playSound('correct')
       resolve(nameId, resultFor(mistakes[nameId] ?? 0))
       setFlash({ id: targetId, ok: true })
       setSelected(null)
     } else {
+      playSound('wrong')
       setMistakes((m) => ({ ...m, [nameId]: (m[nameId] ?? 0) + 1 }))
       setFlash({ id: targetId, ok: false })
       setShake(nameId)

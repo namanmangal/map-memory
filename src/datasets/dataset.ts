@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react'
 import { buildMap, type Callout, type Shape } from '../map/geo'
-import type { DatasetConfig, Place } from './types'
+import type { DatasetConfig, Place, PlaceImage } from './types'
 
 export const ALL_GROUPS = 'All'
 
@@ -17,7 +17,16 @@ export type LoadedDataset = {
 }
 
 export async function loadDataset(config: DatasetConfig): Promise<LoadedDataset> {
-  const [topology, places] = await Promise.all([config.loadTopology(), config.loadPlaces()])
+  const [topology, loadedPlaces, images] = await Promise.all([
+    config.loadTopology(),
+    config.loadPlaces(),
+    // Photos are optional extras: if they fail to load, the map still works without them.
+    (config.loadImages?.() ?? Promise.resolve<Record<string, PlaceImage[]>>({})).catch((e: unknown) => {
+      console.warn('Photos unavailable:', e)
+      return {} as Record<string, PlaceImage[]>
+    }),
+  ])
+  const places = loadedPlaces.map((p) => (images[p.id] ? { ...p, images: images[p.id] } : p))
   const { shapes, shapeById, callouts } = buildMap(config, topology, places)
   return {
     config,

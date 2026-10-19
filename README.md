@@ -4,7 +4,7 @@ A web app for learning maps, starting with the 50 US states.
 
 ## Modes
 
-- **Explore**: hover for names, click a state for its capital and facts, color the map by how well you know each state, and list all states A–Z or by region.
+- **Explore**: hover for names, click a state for its capital, facts and photos (state flower, state bird and a famous landmark), color the map by how well you know each state, and list all states A–Z or by region.
 - **Find it**: you're given a name; click the state.
 - **Name it**: a state is highlighted; pick from four nearby options or type the name (one-letter typos are forgiven).
 - **Drag & drop**: drag all the names onto the map. You can also tap a name, then tap the state.
@@ -27,3 +27,7 @@ Each map is a self-contained dataset under `src/datasets/<id>/`:
 - `index.ts` holds a `DatasetConfig`: titles, groups, which TopoJSON to load, the projection (omit if the file is pre-projected), the viewBox, label tweaks, and callout boxes for places too small to click.
 
 Register it in `src/datasets/registry.ts`. A map picker appears once there's more than one. Shapes and places load lazily, so each map's data is only downloaded when someone opens it.
+
+## Photos
+
+State flower, bird and landmark photos are freely licensed images from [Wikimedia Commons](https://commons.wikimedia.org/), linked rather than bundled (`src/datasets/us-states/images.json`). Each photo's photographer and license are shown when it's opened, as the licenses require. Bird and flower photos come from each state's row in Wikipedia's [state bird](https://en.wikipedia.org/wiki/List_of_U.S._state_birds) and [state flower](https://en.wikipedia.org/wiki/List_of_U.S._state_and_territory_flowers) lists (or the species' own article where that photo was too small or uncredited); every landmark is confirmed on Wikidata to be located in its state.

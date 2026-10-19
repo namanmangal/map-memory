@@ -13,6 +13,29 @@ export type Place = {
   group: string
   /** Free-form extras shown on the Explore info card, in order */
   facts?: Record<string, string>
+  /** Photos shown on the Explore info card (loaded from the dataset's images file) */
+  images?: PlaceImage[]
+}
+
+/** A freely licensed photo hosted on Wikimedia Commons, with what's needed to credit it. */
+export type PlaceImage = {
+  /** What it shows, e.g. "State flower" or "Landmark" */
+  kind: string
+  caption: string
+  /** Gallery image (500px wide) */
+  src: string
+  /** Larger version (up to 1280px wide) for the full-size view */
+  large: string
+  width: number
+  height: number
+  /** Photographer, or "Public domain" */
+  credit: string
+  license: string
+  licenseUrl: string
+  /** The file's Wikimedia Commons page */
+  source: string
+  /** Wikipedia article about the subject */
+  article: string
 }
 
 export type CalloutLayout = {
@@ -47,4 +70,6 @@ export type DatasetConfig = {
   insets?: string[]
   loadTopology: () => Promise<Topology>
   loadPlaces: () => Promise<Place[]>
+  /** Photos per place id; optional, and loaded alongside the places */
+  loadImages?: () => Promise<Record<string, PlaceImage[]>>
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ALL_GROUPS, useDataset } from '../datasets/dataset'
 import { MapView } from '../map/MapView'
+import { PlacePhotos } from '../components/PlacePhotos'
 import type { ModeProps } from './QuizShell'
 import { hasProgress, loadStats, mastery, resetProgress } from '../lib/progress'
 
@@ -210,6 +211,14 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
           </button>
         </aside>
       </div>
+
+      {/* Full width under the map, where the photos have room to be seen */}
+      {place?.images && (
+        <section className="photo-gallery" aria-label={`Photos of ${place.name}`}>
+          <h2>{place.name} in pictures</h2>
+          <PlacePhotos key={place.id} images={place.images} placeName={place.name} />
+        </section>
+      )}
     </div>
   )
 }

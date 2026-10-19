@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useDataset, type LoadedDataset } from '../datasets/dataset'
 import { MapView } from '../map/MapView'
+import { playSound } from '../lib/sound'
 import { levenshtein, normalize, shuffle } from '../lib/util'
 import { QuizShell, type GameProps, type ModeProps } from './QuizShell'
 import { QuizPaused, QuizStart } from './QuizStart'
@@ -98,8 +99,10 @@ function NameGame({
   const choose = (id: string) => {
     if (!current || revealed) return
     if (id === current) {
+      playSound('correct')
       advance(`✓ ${ds.byId[current].name}`)
     } else {
+      playSound('wrong')
       setWrongChoices((w) => [...w, id])
       setNote('')
       miss()
@@ -114,10 +117,12 @@ function NameGame({
     const place = ds.byId[current]
     const result = checkTyped(typed, place.name, place.code)
     if (result === 'wrong') {
+      playSound('wrong')
       setNote(`Not ${typed.trim()}`)
       setTyped('')
       miss()
     } else {
+      playSound('correct')
       advance(result === 'typo' ? `✓ Close enough — it's spelled ${place.name}` : `✓ ${place.name}`)
     }
   }
