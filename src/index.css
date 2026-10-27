@@ -6,6 +6,8 @@
   --border: #dedad2;
   --accent: #2f5bd3;
   --accent-soft: #e3eafb;
+  /* Text/icons on the accent color: white on the dark blue (~6:1) */
+  --on-accent: #ffffff;
 
   --land: #e7e3d9;
   --land-hover: #d5cfc0;
@@ -30,29 +32,35 @@
   -webkit-font-smoothing: antialiased;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #161614;
-    --surface: #201f1c;
-    --text: #ecebe6;
-    --muted: #9c978c;
-    --border: #3a3833;
-    --accent: #7c9cf0;
-    --accent-soft: #263257;
+/* Dark theme: set on <html> by src/lib/theme.ts (explicit choice, or the system setting on Auto) */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #161614;
+  --surface: #201f1c;
+  --text: #ecebe6;
+  --muted: #9c978c;
+  --border: #3a3833;
+  --accent: #7c9cf0;
+  --accent-soft: #263257;
+  /* The dark-theme accent is light, so text on it is dark navy (~6.6:1) instead of white (2.7:1) */
+  --on-accent: #0f1733;
 
-    --land: #3a3833;
-    --land-hover: #4c4943;
-    --land-dim: #262522;
-    --stroke: #161614;
+  --land: #3a3833;
+  --land-hover: #4c4943;
+  --land-dim: #262522;
+  --stroke: #161614;
 
-    --good: #3fb871;
-    --second: #e3c13f;
-    --third: #f08a45;
-    --bad: #e86060;
-    --target: #7c9cf0;
-    --target-hover: #a9c0fa;
-    --unseen: #57534b;
-  }
+  --good: #3fb871;
+  --second: #e3c13f;
+  --third: #f08a45;
+  --bad: #e86060;
+  --target: #7c9cf0;
+  --target-hover: #a9c0fa;
+  --unseen: #57534b;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
 }
 
 * {
@@ -75,7 +83,7 @@ button {
   cursor: pointer;
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-radius: 8px;
   padding: 6px 14px;
 }
@@ -170,7 +178,35 @@ h1 {
 
 .tabs button[aria-selected='true'] {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
+}
+
+.theme-switch {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.theme-switch button {
+  width: 36px;
+  height: 38px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.theme-switch button + button {
+  border-left: 1px solid var(--border);
+}
+
+.theme-switch button[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .sound-toggle {
@@ -550,6 +586,13 @@ h1 {
   color: var(--muted);
 }
 
+.legend-note {
+  flex-basis: 100%;
+  margin-top: -4px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 .legend i {
   display: inline-block;
   width: 12px;
@@ -632,7 +675,7 @@ h1 {
 
 .segmented button.on {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .answer {
@@ -742,7 +785,7 @@ h1 {
   pointer-events: none;
   transform: translate(-50%, -130%);
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--accent);
   box-shadow: 0 6px 16px rgb(0 0 0 / 0.25);
   cursor: grabbing;
@@ -891,6 +934,19 @@ h1 {
   opacity: 0.55;
 }
 
+/* Flags and other graphics: whole, on a plain background with a little breathing room */
+.photo-thumb.plain {
+  /* Soft gray, so both navy and mostly white flags stand out in light and dark themes */
+  background: color-mix(in srgb, var(--surface) 70%, #888 30%);
+}
+
+.photo-thumb.plain .photo-main {
+  inset: 12%;
+  width: 76%;
+  height: 76%;
+  filter: drop-shadow(0 1px 3px rgb(0 0 0 / 0.25));
+}
+
 .photo-thumb:hover .photo-main {
   transform: scale(1.03);
 }
@@ -945,6 +1001,13 @@ h1 {
   max-height: calc(100vh - 160px);
   object-fit: contain;
   background: #000;
+}
+
+/* Flags and other graphics (some have transparent parts, e.g. Ohio's swallowtail): same soft gray as their tile */
+.lightbox figure.plain img {
+  background: color-mix(in srgb, var(--surface) 70%, #888 30%);
+  padding: 32px;
+  box-sizing: border-box;
 }
 
 .lightbox figcaption {

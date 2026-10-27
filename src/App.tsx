@@ -7,6 +7,7 @@ import { NameMode } from './modes/NameMode'
 import { DragMode } from './modes/DragMode'
 import { HistoryMode } from './modes/HistoryMode'
 import { setMuted, useMuted } from './lib/sound'
+import { setThemePref, useThemePref, type ThemePref } from './lib/theme'
 
 const MODES = [
   { id: 'explore', label: 'Explore', Component: ExploreMode },
@@ -18,6 +19,12 @@ const MODES = [
 
 type ModeId = (typeof MODES)[number]['id']
 
+const THEMES: { id: ThemePref; label: string; icon: string }[] = [
+  { id: 'light', label: 'Light theme', icon: '☀' },
+  { id: 'system', label: 'Auto theme (follows your system)', icon: '◐' },
+  { id: 'dark', label: 'Dark theme', icon: '☾' },
+]
+
 export default function App() {
   const [datasetId, setDatasetId] = useState(DATASETS[0].id)
   const [mode, setMode] = useState<ModeId>('explore')
@@ -26,6 +33,7 @@ export default function App() {
   // Bumped when progress is reset: remounts the other tabs so no in-progress run writes old answers back.
   const [resetCount, setResetCount] = useState(0)
   const muted = useMuted()
+  const theme = useThemePref()
 
   useEffect(() => {
     let canceled = false
@@ -60,6 +68,19 @@ export default function App() {
             </button>
           ))}
         </nav>
+        <div className="theme-switch" role="group" aria-label="Theme">
+          {THEMES.map((t) => (
+            <button
+              key={t.id}
+              aria-pressed={theme === t.id}
+              aria-label={t.label}
+              title={t.label}
+              onClick={() => setThemePref(t.id)}
+            >
+              {t.icon}
+            </button>
+          ))}
+        </div>
         <button
           className="sound-toggle"
           aria-pressed={muted}

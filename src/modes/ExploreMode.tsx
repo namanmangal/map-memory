@@ -81,6 +81,12 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
             <i className="m-unseen" /> Not quizzed
           </span>
         )}
+        {byMastery && (
+          // Stats are recorded per answer, unlike History, which only keeps finished quizzes.
+          <span className="legend-note">
+            Based on every answer you've given in quizzes, including ones you didn't finish.
+          </span>
+        )}
       </div>
 
       <div className="explore-layout">

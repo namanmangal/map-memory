@@ -36,6 +36,8 @@ export type PlaceImage = {
   source: string
   /** Wikipedia article about the subject */
   article: string
+  /** A graphic such as a flag: shown whole on a plain background instead of a blurred photo backdrop */
+  plain?: boolean
 }
 
 export type CalloutLayout = {

@@ -1,6 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PlaceImage } from '../datasets/types'
 
+/** The named author to credit, or null when there isn't one (e.g. public domain government photos). */
+function authorOf(img: PlaceImage): string | null {
+  const c = img.credit.trim()
+  return c && c !== img.license && c !== 'Public domain' && c !== 'Unknown' ? c : null
+}
+
+/** "Photo: Jane Doe" for photos, "Image: …" for graphics such as flags. */
+function byline(img: PlaceImage): string | null {
+  const author = authorOf(img)
+  return author ? `${img.plain ? 'Image' : 'Photo'}: ${author}` : null
+}
+
 /**
  * A row of thumbnails (e.g. flower, bird, landmark). Clicking one opens a larger view
  * with the photo's credit and license, as Wikimedia Commons' licenses require.
@@ -28,12 +40,14 @@ export function PlacePhotos({ images, placeName }: { images: PlaceImage[]; place
               ref={(el) => {
                 thumbRefs.current[i] = el
               }}
-              className="photo-thumb"
+              className={`photo-thumb ${img.plain ? 'plain' : ''}`}
               onClick={() => setOpenIndex(i)}
-              aria-label={`${img.kind}: ${img.caption} — open larger photo`}
+              aria-label={`${img.kind}: ${img.caption} — open larger ${img.plain ? 'image' : 'photo'}`}
             >
               {/* Blurred copy fills the tile behind the whole, uncropped photo */}
-              <img className="photo-backdrop" src={img.src} alt="" aria-hidden loading="lazy" decoding="async" />
+              {!img.plain && (
+                <img className="photo-backdrop" src={img.src} alt="" aria-hidden loading="lazy" decoding="async" />
+              )}
               <img
                 className="photo-main"
                 src={img.src}
@@ -48,10 +62,7 @@ export function PlacePhotos({ images, placeName }: { images: PlaceImage[]; place
             <div className="photo-caption">
               <span className="photo-kind">{img.kind}</span>
               <strong>{img.caption}</strong>
-              <span className="photo-credit">
-                Photo: {img.credit}
-                {img.license && ` · ${img.license}`}
-              </span>
+              <span className="photo-credit">{[byline(img), img.license].filter(Boolean).join(' · ')}</span>
             </div>
           </li>
         ))}
@@ -121,7 +132,7 @@ function Lightbox({
 
   return (
     <div className="lightbox" role="dialog" aria-modal="true" aria-label={`${img.kind}: ${img.caption}`} onClick={onClose}>
-      <figure ref={figureRef} onClick={(e) => e.stopPropagation()}>
+      <figure ref={figureRef} className={img.plain ? 'plain' : undefined} onClick={(e) => e.stopPropagation()}>
         <button ref={closeRef} className="lightbox-close" onClick={onClose} aria-label="Close">
           ×
         </button>
@@ -131,10 +142,10 @@ function Lightbox({
             <span className="muted">{img.kind}</span> <strong>{img.caption}</strong>
           </div>
           <div className="lightbox-credit">
-            Photo: {img.credit}
+            {byline(img)}
             {img.license && (
               <>
-                {' · '}
+                {byline(img) && ' · '}
                 {img.licenseUrl ? (
                   <a href={img.licenseUrl} target="_blank" rel="noreferrer">
                     {img.license}
@@ -155,13 +166,13 @@ function Lightbox({
           </div>
           {images.length > 1 && (
             <div className="lightbox-nav">
-              <button className="ghost" onClick={() => go(-1)} aria-label="Previous photo">
+              <button className="ghost" onClick={() => go(-1)} aria-label="Previous image">
                 ‹
               </button>
               <span className="muted">
                 {index + 1} / {images.length}
               </span>
-              <button className="ghost" onClick={() => go(1)} aria-label="Next photo">
+              <button className="ghost" onClick={() => go(1)} aria-label="Next image">
                 ›
               </button>
             </div>
