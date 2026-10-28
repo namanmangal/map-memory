@@ -39,6 +39,8 @@ export function useQuizRun(
   active: boolean,
   autoStart: boolean,
   meta: RunMeta,
+  /** Called once the run finishes (e.g. so the toolbar can show a new best score) */
+  onFinish?: () => void,
 ) {
   const ds = useDataset()
   // The clock only starts when the user starts the quiz (or asked to by restarting).
@@ -81,10 +83,11 @@ export function useQuizRun(
   }, [running])
 
   const resolve = (id: string, result: Result) => {
-    if (start === null || paused || results[id]) return
+    // Not before starting, while paused, or while another tab is showing (e.g. a drag released after switching).
+    if (start === null || paused || !active || results[id]) return
     const next = { ...results, [id]: result }
     setResults(next)
-    recordAnswer(ds.config.id, id, result === 'first')
+    recordAnswer(ds.config.id, id, result === 'first', meta.mode.startsWith('capital') ? 'capital' : 'place')
 
     if (Object.keys(next).length === ids.length) {
       const ms = Date.now() - start - pausedTotal.current
@@ -92,6 +95,7 @@ export function useQuizRun(
       const newBest = bestKey ? saveBest(ds.config.id, bestKey, { correct, total: ids.length, ms }) : false
       saveRun(ds.config.id, { ...meta, ms, results: next })
       setFinish({ ms, newBest })
+      onFinish?.()
     }
   }
 
@@ -111,7 +115,7 @@ export function useQuizRun(
     pause,
     resume,
     /** Started and not paused: the question is showing and can be answered */
-    live: start !== null && !paused,
+    live: start !== null && !paused && active,
     running,
     results,
     resolve,

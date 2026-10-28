@@ -9,6 +9,8 @@ export type Place = {
   /** Short code shown as a map label, e.g. "TX" or "FRA" */
   code: string
   capital?: string
+  /** Where the capital is, as [longitude, latitude] — shown as a star on the Explore map */
+  capitalLocation?: [number, number]
   /** Used for "practice one region" filters, e.g. a US census region or a continent */
   group: string
   /** Free-form extras shown on the Explore info card, in order */
@@ -61,6 +63,11 @@ export type DatasetConfig = {
   objectName: string
   /** Omit when the topology is already projected to screen coordinates */
   projection?: GeoProjection
+  /**
+   * For pre-projected maps: the projection the shapes were drawn with, used to place points
+   * such as capitals. Not needed when `projection` is set.
+   */
+  pointProjection?: GeoProjection
   viewBox: string
   /** Hand-tuned label positions where the geometric centroid looks off */
   labelOverrides?: Record<string, [number, number]>

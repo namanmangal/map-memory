@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react'
-import { ALL_GROUPS, useDataset } from '../datasets/dataset'
+import { ALL_GROUPS, useDataset, type LoadedDataset } from '../datasets/dataset'
 import { loadRuns, type RunRecord } from '../lib/progress'
 import { formatTime } from '../lib/util'
 import type { ModeProps } from './QuizShell'
@@ -12,16 +12,33 @@ const QUIZ_LABELS: Record<string, string> = {
   'name-type': 'Name it · Type',
   'name-choose': 'Name it · Choose',
   drag: 'Drag & drop',
+  'capital-type': 'Capitals · Type',
+  'capital-choose': 'Capitals · Choose',
 }
 
 const ALL = 'all'
+
+/**
+ * Saved runs, limited to places that exist in this map: results for unknown ids are dropped, and a
+ * run left with nothing is skipped — so nothing below looks up a place that isn't there. (`hasOwn`,
+ * not `in`, so names like "toString" or "__proto__" don't pass as places.)
+ */
+function runsFor(ds: LoadedDataset): RunRecord[] {
+  return loadRuns(ds.config.id)
+    .map((run) => ({ ...run, results: Object.fromEntries(Object.entries(run.results).filter(([id]) => Object.hasOwn(ds.byId, id))) }))
+    .filter((run) => Object.keys(run.results).length > 0)
+}
+
+/** Quizzes this map offers: Capitals only when its places have capitals. */
+const quizzesFor = (hasCapitals: boolean) =>
+  Object.entries(QUIZ_LABELS).filter(([id]) => hasCapitals || !id.startsWith('capital-'))
 
 const dateFormat = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' })
 
 /** Every finished quiz run, newest first, with the full breakdown on demand. */
 export function HistoryMode({ active }: ModeProps) {
   const ds = useDataset()
-  const [runs, setRuns] = useState(() => loadRuns(ds.config.id))
+  const [runs, setRuns] = useState(() => runsFor(ds))
   const [quiz, setQuiz] = useState(ALL)
   const [group, setGroup] = useState(ALL)
   const [openId, setOpenId] = useState<string | null>(null)
@@ -30,7 +47,7 @@ export function HistoryMode({ active }: ModeProps) {
   const [wasActive, setWasActive] = useState(active)
   if (active !== wasActive) {
     setWasActive(active)
-    if (active) setRuns(loadRuns(ds.config.id))
+    if (active) setRuns(runsFor(ds))
   }
 
   const shown = runs.filter((r) => (quiz === ALL || r.mode === quiz) && (group === ALL || r.group === group)).reverse()
@@ -42,7 +59,8 @@ export function HistoryMode({ active }: ModeProps) {
       <div className="history empty">
         <h2>No quizzes yet</h2>
         <p className="muted">
-          Finish a quiz in Find it, Name it or Drag & drop and it'll show up here, with your score, time and every{' '}
+          Finish a quiz in {ds.hasCapitals ? 'Find it, Name it, Drag & drop or Capitals' : 'Find it, Name it or Drag & drop'}{' '}
+          and it'll show up here, with your score, time and every{' '}
           {ds.config.noun.one} you got right or missed.
         </p>
       </div>
@@ -56,7 +74,7 @@ export function HistoryMode({ active }: ModeProps) {
           Quiz{' '}
           <select value={quiz} onChange={(e) => setQuiz(e.target.value)}>
             <option value={ALL}>All quizzes</option>
-            {Object.entries(QUIZ_LABELS).map(([id, label]) => (
+            {quizzesFor(ds.hasCapitals).map(([id, label]) => (
               <option key={id} value={id}>
                 {label}
               </option>

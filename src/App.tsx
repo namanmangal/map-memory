@@ -3,7 +3,7 @@ import { DATASETS } from './datasets/registry'
 import { DatasetContext, loadDataset, type LoadedDataset } from './datasets/dataset'
 import { ExploreMode } from './modes/ExploreMode'
 import { FindMode } from './modes/FindMode'
-import { NameMode } from './modes/NameMode'
+import { CapitalMode, NameMode } from './modes/NameMode'
 import { DragMode } from './modes/DragMode'
 import { HistoryMode } from './modes/HistoryMode'
 import { setMuted, useMuted } from './lib/sound'
@@ -14,6 +14,8 @@ const MODES = [
   { id: 'find', label: 'Find it', Component: FindMode },
   { id: 'name', label: 'Name it', Component: NameMode },
   { id: 'drag', label: 'Drag & drop', Component: DragMode },
+  // Only for maps whose places have capitals
+  { id: 'capitals', label: 'Capitals', Component: CapitalMode, available: (ds: LoadedDataset) => ds.hasCapitals },
   { id: 'history', label: 'History', Component: HistoryMode },
 ] as const
 
@@ -29,24 +31,51 @@ export default function App() {
   const [datasetId, setDatasetId] = useState(DATASETS[0].id)
   const [mode, setMode] = useState<ModeId>('explore')
   const [loaded, setLoaded] = useState<LoadedDataset | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // Remember which map failed, so switching to one that loads fine shows it instead of an old error.
+  const [failure, setFailure] = useState<{ datasetId: string; message: string } | null>(null)
+  const error = failure?.datasetId === datasetId ? failure.message : null
   // Bumped when progress is reset: remounts the other tabs so no in-progress run writes old answers back.
   const [resetCount, setResetCount] = useState(0)
   const muted = useMuted()
   const theme = useThemePref()
 
+  // Bumped by "Try again" to reload the current map after a failure.
+  const [loadAttempt, setLoadAttempt] = useState(0)
+
   useEffect(() => {
     let canceled = false
     const config = DATASETS.find((d) => d.id === datasetId)!
     loadDataset(config)
-      .then((ds) => !canceled && setLoaded(ds))
-      .catch((e: unknown) => !canceled && setError(String(e)))
+      .then((ds) => {
+        if (canceled) return
+        setLoaded(ds)
+        setFailure((f) => (f?.datasetId === config.id ? null : f)) // a retry that works clears the old error
+      })
+      .catch((e: unknown) => !canceled && setFailure({ datasetId, message: String(e) }))
     return () => {
       canceled = true
     }
-  }, [datasetId])
+  }, [datasetId, loadAttempt])
 
   const ready = loaded?.config.id === datasetId ? loaded : null
+  const modes = MODES.filter((m) => !('available' in m) || (ready !== null && m.available(ready)))
+  // If the chosen tab isn't offered for this map, fall back to Explore.
+  const activeMode: ModeId = modes.some((m) => m.id === mode) ? mode : 'explore'
+
+  /** Arrow keys switch tabs (and move focus with them), wrapping at the ends; Home/End jump to the first/last. */
+  const onTabKey = (e: React.KeyboardEvent) => {
+    const i = modes.findIndex((m) => m.id === activeMode)
+    const next =
+      e.key === 'ArrowRight' ? (i + 1) % modes.length
+      : e.key === 'ArrowLeft' ? (i - 1 + modes.length) % modes.length
+      : e.key === 'Home' ? 0
+      : e.key === 'End' ? modes.length - 1
+      : null
+    if (next === null) return
+    e.preventDefault()
+    setMode(modes[next].id)
+    document.getElementById(`tab-${modes[next].id}`)?.focus()
+  }
 
   return (
     <div className="app">
@@ -61,9 +90,18 @@ export default function App() {
             ))}
           </select>
         )}
-        <nav className="tabs" role="tablist">
-          {MODES.map((m) => (
-            <button key={m.id} role="tab" aria-selected={mode === m.id} onClick={() => setMode(m.id)}>
+        {/* Tab pattern: only the current tab is in the Tab order; ←/→/Home/End move between tabs. */}
+        <nav className="tabs" role="tablist" aria-label="Modes" onKeyDown={onTabKey}>
+          {modes.map((m) => (
+            <button
+              key={m.id}
+              id={`tab-${m.id}`}
+              role="tab"
+              aria-selected={activeMode === m.id}
+              aria-controls={`panel-${m.id}`}
+              tabIndex={activeMode === m.id ? 0 : -1}
+              onClick={() => setMode(m.id)}
+            >
               {m.label}
             </button>
           ))}
@@ -94,18 +132,23 @@ export default function App() {
 
       <main>
         {error ? (
-          <p className="error">Couldn't load the map: {error}</p>
+          <div className="error">
+            <p>Couldn't load the map: {error}</p>
+            <button onClick={() => setLoadAttempt((n) => n + 1)}>Try again</button>
+          </div>
         ) : ready ? (
           <DatasetContext.Provider value={ready}>
             {/* Every tab stays mounted (just hidden) so switching tabs keeps quiz progress.
                 Explore, where reset happens, keeps its view; every other tab starts fresh after a reset. */}
-            {MODES.map(({ id, Component }) => (
+            {modes.map(({ id, Component }) => (
               <div
                 key={id === 'explore' ? `${datasetId}-${id}` : `${datasetId}-${id}-${resetCount}`}
-                hidden={mode !== id}
+                hidden={activeMode !== id}
                 role="tabpanel"
+                id={`panel-${id}`}
+                aria-labelledby={`tab-${id}`}
               >
-                <Component active={mode === id} onProgressReset={() => setResetCount((n) => n + 1)} />
+                <Component active={activeMode === id} onProgressReset={() => setResetCount((n) => n + 1)} />
               </div>
             ))}
           </DatasetContext.Provider>

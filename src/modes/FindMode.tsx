@@ -14,7 +14,7 @@ export function FindMode({ active }: ModeProps) {
   return <QuizShell mode="find" active={active} render={(props) => <FindGame {...props} />} />
 }
 
-function FindGame({ ids, focusIds, bestKey, onRestart, active, autoStart, meta }: GameProps) {
+function FindGame({ ids, focusIds, bestKey, onRestart, active, autoStart, meta, onFinish }: GameProps) {
   const ds = useDataset()
   const [queue] = useState(() => shuffle(ids))
   const { started, begin, paused, pauseReason, pause, resume, live, running, results, resolve, finish, elapsed, done } = useQuizRun(
@@ -23,9 +23,12 @@ function FindGame({ ids, focusIds, bestKey, onRestart, active, autoStart, meta }
     active,
     autoStart,
     meta,
+    onFinish,
   )
   const [mistakes, setMistakes] = useState(0)
   const [wrongId, setWrongId] = useState<string | null>(null)
+  // Bumped on every wrong click, so clicking the same wrong state again restarts its feedback.
+  const [wrongClicks, setWrongClicks] = useState(0)
 
   const current = queue.find((id) => !results[id])
   const revealed = mistakes >= MAX_ATTEMPTS
@@ -34,7 +37,7 @@ function FindGame({ ids, focusIds, bestKey, onRestart, active, autoStart, meta }
     if (!wrongId) return
     const t = setTimeout(() => setWrongId(null), 900)
     return () => clearTimeout(t)
-  }, [wrongId])
+  }, [wrongId, wrongClicks])
 
   const pick = (id: string) => {
     if (!live || !current || results[id]) return
@@ -48,6 +51,7 @@ function FindGame({ ids, focusIds, bestKey, onRestart, active, autoStart, meta }
       playSound('wrong')
       setMistakes((m) => m + 1)
       setWrongId(id)
+      setWrongClicks((n) => n + 1)
     }
   }
 
@@ -93,6 +97,10 @@ function FindGame({ ids, focusIds, bestKey, onRestart, active, autoStart, meta }
         labelFor={(id) => (results[id] ? ds.byId[id].code : undefined)}
         tooltipFor={(id) => (results[id] ? ds.byId[id].name : undefined)}
         onPick={pick}
+        // Keyboard buttons only while a question is live: unanswered states, or just the answer once revealed.
+        canPick={(id) => live && !finish && !!current && !results[id] && (!revealed || id === current)}
+        // Names would give the answer away, so only states already found are named.
+        ariaLabelFor={(id) => (results[id] ? `${ds.byId[id].name} (found)` : 'Unanswered state')}
       />
       <ResultLegend />
       {finish && <Summary ids={ids} results={results} finish={finish} onRestart={onRestart} />}

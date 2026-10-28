@@ -10,6 +10,8 @@ export type Shape = {
   /** [x0, y0, x1, y1] in map coordinates */
   bounds: Bounds
   area: number
+  /** The capital's position on the map, if the place has one */
+  capital?: [number, number]
 }
 
 export type Bounds = [number, number, number, number]
@@ -28,6 +30,13 @@ export function buildMap(config: DatasetConfig, topology: Topology, places: Plac
   const object = topology.objects[config.objectName] as GeometryCollection
   const path = geoPath(config.projection ?? null)
   const known = new Set(places.map((p) => p.id))
+  const placeById = Object.fromEntries(places.map((p) => [p.id, p]))
+  const pointProjection = config.projection ?? config.pointProjection
+  const capitalPoint = (id: string): [number, number] | undefined => {
+    const loc = placeById[id]?.capitalLocation
+    const xy = loc && pointProjection?.(loc)
+    return xy ? [xy[0], xy[1]] : undefined
+  }
 
   const shapes: Shape[] = feature(topology, object)
     .features.filter((f) => known.has(String(f.id)))
@@ -35,7 +44,7 @@ export function buildMap(config: DatasetConfig, topology: Topology, places: Plac
       const id = String(f.id)
       const [x, y] = path.centroid(f)
       const [[x0, y0], [x1, y1]] = path.bounds(f)
-      return { id, d: path(f) ?? '', label: config.labelOverrides?.[id] ?? [x, y], bounds: [x0, y0, x1, y1], area: path.area(f) }
+      return { id, d: path(f) ?? '', label: config.labelOverrides?.[id] ?? [x, y], bounds: [x0, y0, x1, y1], area: path.area(f), capital: capitalPoint(id) }
     })
 
   const shapeById: Record<string, Shape> = Object.fromEntries(shapes.map((s) => [s.id, s]))

@@ -13,7 +13,8 @@ export function DragMode({ active }: ModeProps) {
   return <QuizShell mode="drag" active={active} render={(props) => <DragGame {...props} />} />
 }
 
-type Drag = { id: string; x: number; y: number; startX: number; startY: number; moved: boolean }
+/** A drag in progress; `pointerId` is the finger/mouse that started it — other pointers are ignored. */
+type Drag = { id: string; pointerId: number; x: number; y: number; startX: number; startY: number; moved: boolean }
 
 /** Finds the place under a screen point; the drag ghost has pointer-events: none so it's skipped. */
 function placeAt(x: number, y: number): string | null {
@@ -21,7 +22,7 @@ function placeAt(x: number, y: number): string | null {
   return el?.getAttribute('data-place-id') ?? null
 }
 
-function DragGame({ ids, focusIds, bestKey, onRestart, active: tabActive, autoStart, meta }: GameProps) {
+function DragGame({ ids, focusIds, bestKey, onRestart, active: tabActive, autoStart, meta, onFinish }: GameProps) {
   const ds = useDataset()
   const { started, begin, paused, pauseReason, pause, resume, live, running, results, resolve, finish, elapsed } = useQuizRun(
     ids,
@@ -29,10 +30,14 @@ function DragGame({ ids, focusIds, bestKey, onRestart, active: tabActive, autoSt
     tabActive,
     autoStart,
     meta,
+    onFinish,
   )
   const [mistakes, setMistakes] = useState<Record<string, number>>({})
   const [drag, setDrag] = useState<Drag | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
+  const gameRef = useRef<HTMLDivElement>(null)
+  // After a keyboard placement, which tray position to return focus to once the placed name is gone.
+  const refocusChip = useRef<number | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
   const [flash, setFlash] = useState<{ id: string; ok: boolean } | null>(null)
   const [shake, setShake] = useState<string | null>(null)
@@ -56,6 +61,10 @@ function DragGame({ ids, focusIds, bestKey, onRestart, active: tabActive, autoSt
     if (!live || !targetId || results[targetId]) return
     if (nameId === targetId) {
       playSound('correct')
+      // Placed from the keyboard (focus is on the map): come back to the same spot in the tray next.
+      if (gameRef.current?.querySelector('svg.map')?.contains(document.activeElement)) {
+        refocusChip.current = remaining.indexOf(nameId)
+      }
       resolve(nameId, resultFor(mistakes[nameId] ?? 0))
       setFlash({ id: targetId, ok: true })
       setSelected(null)
@@ -68,6 +77,14 @@ function DragGame({ ids, focusIds, bestKey, onRestart, active: tabActive, autoSt
   }
 
   // Window listeners read these refs so they always see the latest drag and place() without re-binding.
+  // Return focus to the tray after a keyboard placement removes the focused name.
+  useEffect(() => {
+    if (refocusChip.current === null) return
+    const chips = gameRef.current?.querySelectorAll<HTMLElement>('.tray .chip') ?? []
+    chips[Math.min(refocusChip.current, chips.length - 1)]?.focus()
+    refocusChip.current = null
+  }, [results])
+
   const placeRef = useRef(place)
   useEffect(() => {
     placeRef.current = place
@@ -80,48 +97,57 @@ function DragGame({ ids, focusIds, bestKey, onRestart, active: tabActive, autoSt
     setDrag(d)
   }
 
-  // Pausing (including by leaving the window mid-drag) drops whatever name is being dragged.
-  const [wasPaused, setWasPaused] = useState(paused)
-  if (paused !== wasPaused) {
-    setWasPaused(paused)
-    if (paused) {
-      // Clearing the drag also removes its window listeners, so the stale ref is never read.
-      setDrag(null)
-      setOverId(null)
-    }
-  }
+  // Pausing (including by leaving the window mid-drag) or switching tabs drops whatever name is being dragged.
+  const halted = paused || !tabActive
+  useEffect(() => {
+    if (!halted) return
+    // Clear the ref too (via updateDrag): a stale one would make startDrag refuse every later drag.
+    updateDrag(null)
+    setOverId(null)
+    // updateDrag only touches a ref and state setter, so it's safe to leave out of the deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [halted])
 
   useEffect(() => {
     if (!dragging) return
     const move = (e: PointerEvent) => {
       const d = dragRef.current
-      if (!d) return
+      if (!d || e.pointerId !== d.pointerId) return
       const moved = d.moved || Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > 6
       updateDrag({ ...d, x: e.clientX, y: e.clientY, moved })
       setOverId(placeAt(e.clientX, e.clientY))
     }
     const up = (e: PointerEvent) => {
       const d = dragRef.current
+      if (d && e.pointerId !== d.pointerId) return // another finger lifting doesn't drop this drag
       updateDrag(null)
       setOverId(null)
       if (!d) return
       if (d.moved) placeRef.current(d.id, placeAt(e.clientX, e.clientY))
       else setSelected((s) => (s === d.id ? null : d.id))
     }
+    // A cancelled gesture (e.g. the browser took over a touch) just ends the drag: no placement,
+    // no mistake, no selection.
+    const cancel = (e: PointerEvent) => {
+      if (dragRef.current && e.pointerId !== dragRef.current.pointerId) return
+      updateDrag(null)
+      setOverId(null)
+    }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
-    window.addEventListener('pointercancel', up)
+    window.addEventListener('pointercancel', cancel)
     return () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
-      window.removeEventListener('pointercancel', up)
+      window.removeEventListener('pointercancel', cancel)
     }
   }, [dragging])
 
   const startDrag = (e: ReactPointerEvent, id: string) => {
-    if (e.button !== 0) return
+    // One drag at a time: a second finger on another name doesn't start a competing drag.
+    if (e.button !== 0 || dragRef.current) return
     e.preventDefault()
-    updateDrag({ id, x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY, moved: false })
+    updateDrag({ id, pointerId: e.pointerId, x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY, moved: false })
   }
 
   const active = drag?.moved ? drag.id : selected
@@ -138,8 +164,8 @@ function DragGame({ ids, focusIds, bestKey, onRestart, active: tabActive, autoSt
   }
 
   return (
-    <div className="game drag-game">
-      <div className="prompt">
+    <div className="game drag-game" ref={gameRef}>
+      <div className="prompt" aria-live="polite">
         {!started && <QuizStart count={ids.length} onStart={begin} />}
         {paused && <QuizPaused elapsed={elapsed()} reason={pauseReason} onResume={resume} />}
         {live && !finish && (
@@ -170,6 +196,9 @@ function DragGame({ ids, focusIds, bestKey, onRestart, active: tabActive, autoSt
           tooltipFor={(id) => (results[id] ? ds.byId[id].name : undefined)}
           labelFor={(id) => (results[id] ? ds.byId[id].code : undefined)}
           onPick={(id) => selected && place(selected, id)}
+          // Keyboard buttons only once a name is picked, and only for states not placed yet.
+          canPick={(id) => live && !finish && selected !== null && !results[id]}
+          ariaLabelFor={(id) => (results[id] ? `${ds.byId[id].name} (placed)` : 'Unanswered state')}
         />
         {live && !finish && (
           <ul className="tray" aria-label={`${ds.config.noun.many} to place`}>
@@ -185,6 +214,23 @@ function DragGame({ ids, focusIds, bestKey, onRestart, active: tabActive, autoSt
                   .filter(Boolean)
                   .join(' ')}
                 onPointerDown={(e) => startDrag(e, id)}
+                // Keyboard: Enter/Space selects the name, then pick a state on the map with Enter.
+                role="button"
+                tabIndex={0}
+                aria-pressed={selected === id}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    if (selected === id) return setSelected(null)
+                    setSelected(id)
+                    // Jump to the map so the next Tab/Enter is about states, not the other names.
+                    requestAnimationFrame(() =>
+                      gameRef.current
+                        ?.querySelector<SVGElement>('svg.map [tabindex="0"][aria-label="Unanswered state"]')
+                        ?.focus(),
+                    )
+                  }
+                }}
               >
                 {ds.byId[id].name}
               </li>

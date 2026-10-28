@@ -3,7 +3,7 @@ import { ALL_GROUPS, useDataset } from '../datasets/dataset'
 import { MapView } from '../map/MapView'
 import { PlacePhotos } from '../components/PlacePhotos'
 import type { ModeProps } from './QuizShell'
-import { hasProgress, loadStats, mastery, resetProgress } from '../lib/progress'
+import { combineStats, hasProgress, loadStats, mastery, resetProgress } from '../lib/progress'
 
 function masteryClass(m: number | null): string {
   if (m === null) return 'm-unseen'
@@ -17,14 +17,21 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
   const ds = useDataset()
   const [selected, setSelected] = useState<string | null>(null)
   const [showLabels, setShowLabels] = useState(true)
+  const [capitalsChecked, setShowCapitals] = useState(true)
+  const showCapitals = ds.hasCapitals && capitalsChecked
   const [byMastery, setByMastery] = useState(false)
   const [listOrder, setListOrder] = useState<'group' | 'alpha'>('alpha')
-  const [stats, setStats] = useState(() => loadStats(ds.config.id))
+  const [placeStats, setPlaceStats] = useState(() => loadStats(ds.config.id))
+  const [capitalStats, setCapitalStats] = useState(() => loadStats(ds.config.id, 'capital'))
+  const [resetFailed, setResetFailed] = useState(false)
   // Quizzes on other tabs record new stats, so re-read them whenever this tab is shown again.
   const [wasActive, setWasActive] = useState(active)
   if (active !== wasActive) {
     setWasActive(active)
-    if (active) setStats(loadStats(ds.config.id))
+    if (active) {
+      setPlaceStats(loadStats(ds.config.id))
+      setCapitalStats(loadStats(ds.config.id, 'capital'))
+    }
   }
   const [group, setGroup] = useState(ALL_GROUPS)
   const [zoomTarget, setZoomTarget] = useState<{ id?: string; nonce: number; levelOf?: string[] } | null>(null)
@@ -44,7 +51,10 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
   const allGroups = group === ALL_GROUPS
 
   const place = selected ? ds.byId[selected] : null
-  const stat = selected ? stats[selected] : undefined
+  // The Capitals quiz only counts toward "how well I know them" while capitals are shown.
+  const stats = showCapitals ? combineStats(placeStats, capitalStats) : placeStats
+  const stat = selected ? placeStats[selected] : undefined
+  const capitalStat = selected ? capitalStats[selected] : undefined
 
   const classFor = (id: string) =>
     [id === selected && 'selected', byMastery ? masteryClass(mastery(stats[id])) : 'hoverable']
@@ -71,6 +81,11 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
         <label>
           <input type="checkbox" checked={showLabels} onChange={(e) => setShowLabels(e.target.checked)} /> Labels
         </label>
+        {ds.hasCapitals && (
+          <label>
+            <input type="checkbox" checked={capitalsChecked} onChange={(e) => setShowCapitals(e.target.checked)} /> Capitals
+          </label>
+        )}
         <label>
           <input type="checkbox" checked={byMastery} onChange={(e) => setByMastery(e.target.checked)} /> Color by
           how well I know them
@@ -84,7 +99,10 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
         {byMastery && (
           // Stats are recorded per answer, unlike History, which only keeps finished quizzes.
           <span className="legend-note">
-            Based on every answer you've given in quizzes, including ones you didn't finish.
+            Based on every answer you've given in{' '}
+            {showCapitals ? 'the map quizzes and the Capitals quiz' : 'the map quizzes (Find it, Name it, Drag & drop)'},
+            including ones you didn't finish.
+            {!showCapitals && ' Turn on Capitals to include the Capitals quiz.'}
           </span>
         )}
       </div>
@@ -96,7 +114,10 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
           zoomable
           classFor={classFor}
           labelFor={showLabels ? (id) => ds.byId[id].code : undefined}
-          tooltipFor={(id) => ds.byId[id].name}
+          tooltipFor={(id) => {
+            const p = ds.byId[id]
+            return p.capital ? `${p.name}\nCapital: ${p.capital}` : p.name
+          }}
           onPick={(id) => {
             // Clicking the selected state again deselects it and zooms back out.
             if (id === selected) {
@@ -108,6 +129,9 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
             zoomTo(id)
           }}
           zoomTarget={zoomTarget}
+          ariaLabelFor={(id) => (ds.byId[id].capital ? `${ds.byId[id].name}, capital ${ds.byId[id].capital}` : ds.byId[id].name)}
+          showCapitals={showCapitals}
+          namedCapital={selected}
           onViewChange={setMapAtStart}
         />
 
@@ -123,6 +147,9 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
                   [ds.config.groupLabel, place.group],
                   ...Object.entries(place.facts ?? {}),
                   ['Your record', stat ? `${stat.firstTry} of ${stat.seen} first try` : 'Not quizzed yet'],
+                  ...(capitalStat
+                    ? [['Capital record', `${capitalStat.firstTry} of ${capitalStat.seen} first try`]]
+                    : []),
                 ].map(([k, v]) => (
                   <div key={k} className="row">
                     <dt>{k}</dt>
@@ -155,11 +182,19 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
             <summary>
               {allGroups ? `All ${groupIds.length}` : `${groupIds.length} ${group}`} {ds.config.noun.many}
             </summary>
-            <span className="segmented small">
-              <button className={listOrder === 'alpha' ? 'on' : ''} onClick={() => setListOrder('alpha')}>
+            <span className="segmented small" role="group" aria-label="List order">
+              <button
+                className={listOrder === 'alpha' ? 'on' : ''}
+                aria-pressed={listOrder === 'alpha'}
+                onClick={() => setListOrder('alpha')}
+              >
                 A–Z
               </button>
-              <button className={listOrder === 'group' ? 'on' : ''} onClick={() => setListOrder('group')}>
+              <button
+                className={listOrder === 'group' ? 'on' : ''}
+                aria-pressed={listOrder === 'group'}
+                onClick={() => setListOrder('group')}
+              >
                 By {ds.config.groupLabel.toLowerCase()}
               </button>
             </span>
@@ -207,23 +242,28 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
             title={hasProgress(ds.config.id) ? undefined : 'Nothing to reset yet'}
             onClick={() => {
               if (confirm(`Reset all progress and quiz history for ${ds.config.title}?`)) {
-                resetProgress(ds.config.id)
-                setStats({})
+                const cleared = resetProgress(ds.config.id)
+                // Show what's actually stored now, rather than assuming the reset worked.
+                setPlaceStats(loadStats(ds.config.id))
+                setCapitalStats(loadStats(ds.config.id, 'capital'))
+                setResetFailed(!cleared)
                 onProgressReset()
               }
             }}
           >
             Reset progress
           </button>
+          {resetFailed && (
+            <p className="error" role="alert">
+              Couldn't clear all saved progress — your browser's storage may be full or blocked.
+            </p>
+          )}
         </aside>
       </div>
 
       {/* Full width under the map, where the photos have room to be seen */}
       {place?.images && (
-        <section className="photo-gallery" aria-label={`Photos of ${place.name}`}>
-          <h2>{place.name} in pictures</h2>
-          <PlacePhotos key={place.id} images={place.images} placeName={place.name} />
-        </section>
+        <PlacePhotos key={place.id} images={place.images} placeName={place.name} title={`${place.name} in pictures`} />
       )}
     </div>
   )

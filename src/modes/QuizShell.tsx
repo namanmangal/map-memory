@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { ALL_GROUPS, useDataset } from '../datasets/dataset'
+import type { Place } from '../datasets/types'
 import { loadBest, type RunMeta } from '../lib/progress'
 import { formatTime } from '../lib/util'
 
@@ -16,6 +17,8 @@ export type GameProps = {
   autoStart: boolean
   /** Recorded with the run in the quiz history */
   meta: RunMeta
+  /** Tells the shell a run finished, so the toolbar's best score refreshes */
+  onFinish: () => void
 }
 
 /** Props every tab gets; tabs stay mounted when hidden so switching doesn't lose progress */
@@ -32,10 +35,13 @@ export type ModeProps = {
 export function QuizShell({
   mode,
   active,
+  eligible,
   render,
 }: {
   mode: string
   active: boolean
+  /** Only quiz places this accepts (e.g. ones that have a capital); default all */
+  eligible?: (place: Place) => boolean
   render: (props: GameProps) => ReactNode
 }) {
   const ds = useDataset()
@@ -43,14 +49,19 @@ export function QuizShell({
   const [practiceIds, setPracticeIds] = useState<string[] | null>(null)
   const [run, setRun] = useState(0)
   const [autoStart, setAutoStart] = useState(false)
+  // Bumped when a run finishes so the "Best" score below is re-read from storage.
+  const [, setFinishedRuns] = useState(0)
 
-  const groupIds = ds.idsForGroup(group)
+  const canAsk = (id: string) => !eligible || eligible(ds.byId[id])
+  const groupIds = ds.idsForGroup(group).filter(canAsk)
+  const totalCount = ds.places.filter((p) => canAsk(p.id)).length
   const ids = practiceIds ?? groupIds
   const bestKey = practiceIds ? undefined : `${mode}:${group}`
   const best = bestKey ? loadBest(ds.config.id, bestKey) : undefined
 
   const restart = (next?: string[]) => {
-    setPracticeIds(next && next.length < groupIds.length ? next : null)
+    // Started from a practice list (even one covering every state) → practice: labeled, never a best score.
+    setPracticeIds(next ?? null)
     setAutoStart(true)
     setRun((r) => r + 1)
   }
@@ -69,12 +80,16 @@ export function QuizShell({
               setRun((r) => r + 1)
             }}
           >
-            <option value={ALL_GROUPS}>All {ds.places.length}</option>
-            {ds.config.groups.map((g) => (
-              <option key={g} value={g}>
-                {g}
-              </option>
-            ))}
+            <option value={ALL_GROUPS}>All {totalCount}</option>
+            {ds.config.groups.map((g) => {
+              // A region with nothing this quiz can ask (e.g. no capitals) can't be chosen.
+              const count = ds.idsForGroup(g).filter(canAsk).length
+              return (
+                <option key={g} value={g} disabled={count === 0}>
+                  {count === 0 ? `${g} (none)` : g}
+                </option>
+              )
+            })}
           </select>
         </label>
         {practiceIds && <span className="pill">
@@ -98,6 +113,7 @@ export function QuizShell({
           active,
           autoStart,
           meta: { mode, group, practice: practiceIds !== null },
+          onFinish: () => setFinishedRuns((n) => n + 1),
         })}
       </div>
     </div>

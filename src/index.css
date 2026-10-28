@@ -15,6 +15,9 @@
   --stroke: #ffffff;
 
   --good: #2e9e5b;
+  /* Text versions of the status colors: darker so small text clears 4.5:1 on light backgrounds */
+  --good-text: #1b6b3a;
+  --bad-text: #b3261e;
   --second: #d9b02a;
   --third: #e8772e;
   --bad: #d64545;
@@ -51,6 +54,8 @@
   --stroke: #161614;
 
   --good: #3fb871;
+  --good-text: #3fb871;
+  --bad-text: #ee7a7a;
   --second: #e3c13f;
   --third: #f08a45;
   --bad: #e86060;
@@ -102,7 +107,7 @@ button.link {
 }
 
 button.link.danger {
-  color: var(--bad);
+  color: var(--bad-text);
 }
 
 button:disabled {
@@ -135,7 +140,7 @@ input:not([type]) {
 
 .pill.good {
   background: color-mix(in srgb, var(--good) 18%, transparent);
-  color: var(--good);
+  color: var(--good-text);
 }
 
 /* ---------- Layout ---------- */
@@ -297,6 +302,17 @@ h1 {
   cursor: pointer;
 }
 
+.place:focus-visible {
+  outline: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .place.dim {
   fill: var(--land-dim);
 }
@@ -382,6 +398,26 @@ h1 {
   opacity: 0.6;
 }
 
+.capital-star {
+  fill: var(--text);
+  stroke: var(--surface);
+  stroke-width: 0.12em;
+  paint-order: stroke;
+  cursor: pointer;
+}
+
+.capital-name {
+  font-weight: 600;
+  font-style: italic;
+  fill: var(--text);
+  dominant-baseline: central;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: var(--land);
+  stroke-width: 0.25em;
+  stroke-opacity: 0.8;
+}
+
 .label {
   font-size: inherit;
   font-weight: 600;
@@ -463,13 +499,21 @@ h1 {
 .tooltip span {
   display: block;
   transform: translate(12px, -130%);
-  white-space: nowrap;
+  /* pre-line: a tooltip can have a second line (e.g. the capital in Explore) */
+  white-space: pre-line;
   background: var(--text);
   color: var(--bg);
   padding: 3px 8px;
   border-radius: 6px;
   font-size: 0.85rem;
-  font-weight: 600;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+/* The place name (first line) stands out; extra lines such as the capital stay lighter. */
+.tooltip span::first-line {
+  font-size: 0.95rem;
+  font-weight: 700;
 }
 
 /* ---------- Explore ---------- */
@@ -704,7 +748,7 @@ h1 {
 
 .choices button.wrong {
   border-color: var(--bad);
-  color: var(--bad);
+  color: var(--bad-text);
   text-decoration: line-through;
 }
 
@@ -757,6 +801,27 @@ h1 {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+/* Reduced motion: switch off nonessential movement. Hints that carry meaning stay, without motion:
+   the flashing answer becomes a steady highlight, and a wrong drop keeps its red border. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .place.pulse {
+    fill: var(--target);
+    stroke: var(--text);
+    stroke-width: 2;
+  }
+
+  .photo-thumb:hover .photo-main {
+    transform: none;
+  }
 }
 
 .chip.lifted {
@@ -868,7 +933,7 @@ h1 {
 }
 
 .error {
-  color: var(--bad);
+  color: var(--bad-text);
 }
 
 /* ---------- Photos ---------- */
@@ -999,6 +1064,9 @@ h1 {
   display: block;
   max-width: 100%;
   max-height: calc(100vh - 160px);
+  /* May shrink on short screens so the caption fits, but stays reasonably large */
+  flex: 0 1 auto;
+  min-height: min(40vh, 240px);
   object-fit: contain;
   background: #000;
 }
@@ -1011,6 +1079,10 @@ h1 {
 }
 
 .lightbox figcaption {
+  /* Long credits and links scroll here rather than being cut off */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   padding: 12px 16px;
   display: flex;
   flex-direction: column;
@@ -1053,6 +1125,8 @@ h1 {
   font-size: 1.3rem;
   line-height: 1;
   background: rgb(0 0 0 / 0.55);
+  /* Always white: it sits on a translucent black circle over the image, not on the accent color */
+  color: #fff;
   border: none;
 }
 

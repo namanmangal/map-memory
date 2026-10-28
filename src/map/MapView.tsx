@@ -13,6 +13,13 @@ type Props = {
   labelFor?: (id: string) => string | undefined
   /** Text for the hover tooltip; return undefined for no tooltip */
   tooltipFor?: (id: string) => string | undefined
+  /** Accessible name for a state when it's a keyboard-focusable button (only when `onPick` is set) */
+  ariaLabelFor?: (id: string) => string
+  /**
+   * Which states can be picked right now (e.g. not before a quiz starts, not already answered).
+   * Only these are keyboard buttons; defaults to every active state.
+   */
+  canPick?: (id: string) => boolean
   onPick?: (id: string) => void
   onHover?: (id: string | null) => void
   /**
@@ -23,11 +30,27 @@ type Props = {
   zoomTarget?: { id?: string; nonce: number; levelOf?: string[] } | null
   /** Called with true when the map is at its starting view (full map or region), false once zoomed or panned away */
   onViewChange?: (atStart: boolean) => void
+  /** Draw a star at each place's capital */
+  showCapitals?: boolean
+  /** A place whose capital name is always shown (e.g. the selected one); otherwise names appear once zoomed in */
+  namedCapital?: string | null
 }
 
 type Box = { x: number; y: number; w: number; h: number }
 
 const MAX_ZOOM = 8
+/** Every capital's name is shown once zoomed in at least this far (scale = view width / full width) */
+const CAPITAL_NAMES_SCALE = 0.4
+
+/** A five-pointed star centered on (cx, cy) */
+function starPath(cx: number, cy: number, r: number): string {
+  const pts = Array.from({ length: 10 }, (_, i) => {
+    const radius = i % 2 === 0 ? r : r * 0.45
+    const angle = (Math.PI / 5) * i - Math.PI / 2
+    return `${(cx + radius * Math.cos(angle)).toFixed(2)},${(cy + radius * Math.sin(angle)).toFixed(2)}`
+  })
+  return `M${pts.join('L')}Z`
+}
 const BUTTON_STEP = 1.6
 /** Labels are 10 map units on the full map and shrink in map units as you zoom, so they grow only gently on screen. */
 const labelSizeAt = (scale: number) => 10 * Math.pow(scale, 0.7)
@@ -117,9 +140,16 @@ function layoutInsets(ids: string[], region: Bounds, focus: Box, shapeBounds: (i
   return { panel, transforms }
 }
 
-/** Zooms by `factor` (>1 = in) keeping the map point (px, py) fixed on screen. */
+/**
+ * Zooms by `factor` (>1 = in) keeping the map point (px, py) fixed on screen. The factor is first
+ * limited to the zoom range, so at a limit nothing moves and the same box comes back (callers use
+ * that to know the wheel can scroll the page instead).
+ */
 function zoomAt(b: Box, px: number, py: number, factor: number, base: Box): Box {
-  return clampBox({ x: px - (px - b.x) / factor, y: py - (py - b.y) / factor, w: b.w / factor, h: b.h / factor }, base)
+  const w = Math.min(Math.max(b.w / factor, base.w / MAX_ZOOM), base.w)
+  const f = b.w / w
+  if (Math.abs(f - 1) < 1e-9) return b
+  return clampBox({ x: px - (px - b.x) / f, y: py - (py - b.y) / f, w, h: (w * base.h) / base.w }, base)
 }
 
 /**
@@ -133,17 +163,22 @@ export function MapView({
   classFor,
   labelFor,
   tooltipFor,
+  ariaLabelFor,
+  canPick,
   onPick,
   onHover,
   zoomTarget,
   onViewChange,
+  showCapitals,
+  namedCapital,
 }: Props) {
-  const { config, shapes, shapeById, callouts, places } = useDataset()
+  const { config, shapes, shapeById, callouts, places, byId } = useDataset()
   const isActive = (id: string) => !activeIds || activeIds.has(id)
 
   // ----- View box: fits the focus, then the user can zoom/pan from there -----
   const base = parseBox(config.viewBox)
-  const focusKey = focusIds && focusIds.length < places.length ? focusIds.join(',') : 'all'
+  // An empty focus (e.g. a region with nothing to ask) shows the whole map rather than fitting to nothing.
+  const focusKey = focusIds && focusIds.length > 0 && focusIds.length < places.length ? focusIds.join(',') : 'all'
   const focusList = focusKey === 'all' ? null : focusIds!
   // Insets in a region get moved next to it, so fit to the rest of the region only.
   const insetIds = new Set(config.insets ?? [])
@@ -181,11 +216,12 @@ export function MapView({
   const insets = movedInsets.length
     ? layoutInsets(movedInsets, focusBounds!, focus, (id) => shapeById[id].bounds)
     : null
-  const labelPoint = (id: string): [number, number] => {
-    const [x, y] = shapeById[id].label
+  /** A map point, moved along with its place when that place is shown as an inset */
+  const placePoint = (id: string, [x, y]: [number, number]): [number, number] => {
     const t = insets?.transforms[id]
     return t ? [x * t.s + t.tx, y * t.s + t.ty] : [x, y]
   }
+  const labelPoint = (id: string) => placePoint(id, shapeById[id].label)
   // Remember the user's zoom only for the current focus, so changing region re-fits the map.
   const [zoom, setZoom] = useState<{ key: string; box: Box } | null>(null)
   const view = zoom?.key === focusKey ? zoom.box : focus
@@ -237,9 +273,14 @@ export function MapView({
     const svg = svgRef.current
     if (!zoomable || !svg) return
     const onWheel = (e: WheelEvent) => {
-      e.preventDefault()
       const [px, py] = toMap(e.clientX, e.clientY)
-      setViewRef.current(zoomAt(viewRef.current, px, py, Math.exp(-e.deltaY * 0.0025), base))
+      const current = viewRef.current
+      const next = zoomAt(current, px, py, Math.exp(-e.deltaY * 0.0025), base)
+      // Already at the zoom limit in this direction: let the page scroll instead of swallowing the wheel.
+      const same = Math.abs(next.w - current.w) < 1e-6 && Math.abs(next.x - current.x) < 1e-6 && Math.abs(next.y - current.y) < 1e-6
+      if (same) return
+      e.preventDefault()
+      setViewRef.current(next)
     }
     svg.addEventListener('wheel', onWheel, { passive: false })
     return () => svg.removeEventListener('wheel', onWheel)
@@ -279,6 +320,9 @@ export function MapView({
 
   const onPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (!zoomable || (e.pointerType === 'mouse' && e.button !== 0)) return
+    // A new press starts fresh: a click swallowed-to-be from an earlier pan that never got a click
+    // (e.g. released outside the map) mustn't eat this one.
+    if (pointers.current.size === 0) suppressClick.current = false
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
     startGesture()
   }
@@ -300,7 +344,11 @@ export function MapView({
     if (!g.panning && Math.hypot(dx, dy) > 5) {
       g.panning = true
       setPanning(true)
-      svgRef.current?.setPointerCapture(e.pointerId)
+      try {
+        svgRef.current?.setPointerCapture(e.pointerId)
+      } catch {
+        // The pointer already went away (e.g. the gesture was cancelled); panning still works without capture.
+      }
     }
     if (g.panning) {
       const r = svgRef.current!.getBoundingClientRect()
@@ -309,9 +357,20 @@ export function MapView({
     }
   }
 
+  /** Releasing a pointer; a pan that just ended shouldn't also count as a click. */
   const onPointerUp = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (!pointers.current.delete(e.pointerId)) return
     if (gesture.current?.panning) suppressClick.current = true
+    endPointer()
+  }
+
+  /** A cancelled pointer (e.g. the browser took over the gesture) only clears gesture state. */
+  const onPointerCancel = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (!pointers.current.delete(e.pointerId)) return
+    endPointer()
+  }
+
+  const endPointer = () => {
     setPanning(false)
     // Lifting one finger of a pinch continues as a pan from where things are now.
     if (pointers.current.size > 0) startGesture()
@@ -348,16 +407,132 @@ export function MapView({
 
   // ----- Rendering -----
   const handlers = (id: string) => (isActive(id) ? { 'data-place-id': id, onClick: () => onPick?.(id) } : {})
+  /**
+   * The state's own shape is its keyboard control: focusable, announced, and picked with Enter or
+   * Space. Other click targets for the same place (callout box, star, hit area) stay mouse-only.
+   */
+  const keyboard = (id: string) =>
+    isActive(id) && onPick && (canPick?.(id) ?? true)
+      ? {
+          tabIndex: 0,
+          role: 'button',
+          'aria-label': ariaLabelFor?.(id) ?? byId[id].name,
+          onKeyDown: (e: React.KeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              onPick(id)
+            }
+          },
+        }
+      : {}
+  const mouseOnly = { 'aria-hidden': true }
   const cls = (id: string) => `place ${isActive(id) ? (classFor?.(id) ?? '') : 'dim'}`
   // Island groups like Hawaii are mostly ocean, so insets get a click area covering their whole box.
   const hitArea = (id: string) => {
     if (!insetIds.has(id) || !isActive(id)) return null
     const [x0, y0, x1, y1] = shapeById[id].bounds
-    return <rect className="hit-area" x={x0} y={y0} width={x1 - x0} height={y1 - y0} {...handlers(id)} />
+    return <rect className="hit-area" x={x0} y={y0} width={x1 - x0} height={y1 - y0} {...handlers(id)} {...mouseOnly} />
   }
   const labelSize = labelSizeAt(scale)
   const shownCallouts = callouts.filter((c) => !fitsInside(c.id, scale))
   const boxedIds = new Set(shownCallouts.map((c) => c.id))
+  const capitals = showCapitals ? layoutCapitals() : null
+
+  /**
+   * Places capital stars and names so nothing covers anything else: a state label that would sit
+   * on a star moves just below or above it, and each name takes the first spot (right, left,
+   * above, below, or diagonally right) clear of labels, other names and other stars.
+   */
+  function layoutCapitals() {
+    const fs = labelSize // state label size
+    const nameFs = labelSize * 0.95
+    const r = labelSize * 0.55
+    type Rect = [number, number, number, number]
+    const overlaps = (a: Rect, b: Rect) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]
+    const overlapArea = (a: Rect, b: Rect) =>
+      Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]))
+    /** Lowest-cost option: covering text costs far more than covering a star. */
+    const leastCovering = <T,>(options: T[], rectOf: (o: T) => Rect, text: Rect[], marks: Rect[]): T => {
+      const cost = (o: T) => {
+        const box = rectOf(o)
+        return text.reduce((sum, t) => sum + overlapArea(box, t) * 10, 0) + marks.reduce((sum, m) => sum + overlapArea(box, m), 0)
+      }
+      return options.reduce((best, o) => (cost(o) < cost(best) ? o : best))
+    }
+    // Rough text extents: bold caps ~0.7em per letter, italic names ~0.58em per letter. Rendered
+    // text boxes are ~1.2em tall, plus a little padding so near-misses count as collisions.
+    const pad = fs * 0.1
+    const labelRect = ([x, y]: [number, number], text: string): Rect => {
+      const w = text.length * 0.7 * fs
+      const h = fs * 1.2
+      return [x - w / 2 - pad, y - h / 2 - pad, x + w / 2 + pad, y + h / 2 + pad]
+    }
+
+    const stars: Record<string, [number, number]> = {}
+    const labelPos: Record<string, [number, number]> = {}
+    const names: { id: string; text: string; x: number; y: number; anchor: 'start' | 'end' | 'middle' }[] = []
+    const taken: Rect[] = []
+
+    for (const s of shapes) {
+      if (s.capital && isActive(s.id)) stars[s.id] = placePoint(s.id, s.capital)
+    }
+    const starRect = ([x, y]: [number, number]): Rect => [x - r, y - r, x + r, y + r]
+    const starRects = Object.entries(stars).map(([id, p]) => ({ id, rect: starRect(p) }))
+
+    // State labels: stay put unless that covers any star; then try just below/above it.
+    for (const s of shapes) {
+      const label = boxedIds.has(s.id) || !isActive(s.id) ? undefined : labelFor?.(s.id)
+      if (!label) continue
+      const [lx, ly] = labelPoint(s.id)
+      const own = stars[s.id]
+      // Far enough from the star's center that the label's (padded) box clears it.
+      const clearance = r + fs * 0.6 + pad + fs * 0.05
+      const candidates: [number, number][] = [
+        [lx, ly],
+        ...(own ? ([[lx, own[1] + clearance], [lx, own[1] - clearance]] as [number, number][]) : []),
+        [lx, ly + fs * 1.1],
+        [lx, ly - fs * 1.1],
+        // sideways too, for tight spots (e.g. MA next to Providence)
+        [lx - label.length * 0.7 * fs, ly],
+        [lx + label.length * 0.7 * fs, ly],
+      ]
+      const starBoxes = starRects.map((st) => st.rect)
+      const pos =
+        candidates.find((c) => !starBoxes.some((st) => overlaps(st, labelRect(c, label)))) ??
+        leastCovering(candidates, (c) => labelRect(c, label), taken, starBoxes)
+      labelPos[s.id] = pos
+      taken.push(labelRect(pos, label))
+    }
+
+    for (const s of shapes) {
+      const star = stars[s.id]
+      const text = byId[s.id].capital
+      if (!star || !text || !(s.id === namedCapital || scale <= CAPITAL_NAMES_SCALE)) continue
+      const [x, y] = star
+      const w = text.length * 0.58 * nameFs + pad * 2
+      const h = nameFs * 1.2 + pad * 2
+      const gap = r * 1.4
+      const spots = [
+        { x: x + gap, y, anchor: 'start' as const, rect: [x + gap, y - h / 2, x + gap + w, y + h / 2] as Rect },
+        { x: x - gap, y, anchor: 'end' as const, rect: [x - gap - w, y - h / 2, x - gap, y + h / 2] as Rect },
+        { x, y: y - gap - h / 2, anchor: 'middle' as const, rect: [x - w / 2, y - gap - h, x + w / 2, y - gap] as Rect },
+        { x, y: y + gap + h / 2, anchor: 'middle' as const, rect: [x - w / 2, y + gap, x + w / 2, y + gap + h] as Rect },
+        { x: x + gap * 0.7, y: y - gap - h / 2, anchor: 'start' as const, rect: [x + gap * 0.7, y - gap - h, x + gap * 0.7 + w, y - gap] as Rect },
+        { x: x + gap * 0.7, y: y + gap + h / 2, anchor: 'start' as const, rect: [x + gap * 0.7, y + gap, x + gap * 0.7 + w, y + gap + h] as Rect },
+      ]
+      // Clear of labels, names already placed, and every other capital's star; failing that, a name
+      // may cover a neighbor's star but never a label or another name.
+      const otherStars = starRects.filter((st) => st.id !== s.id).map((st) => st.rect)
+      const clear = (p: { rect: Rect }, blockers: Rect[]) => !blockers.some((t) => overlaps(t, p.rect))
+      const spot =
+        spots.find((p) => clear(p, [...taken, ...otherStars])) ??
+        spots.find((p) => clear(p, taken)) ??
+        leastCovering(spots, (p) => p.rect, taken, otherStars)
+      taken.push(spot.rect)
+      names.push({ id: s.id, text, x: spot.x, y: spot.y, anchor: spot.anchor })
+    }
+    return { stars, labelPos, names, r }
+  }
 
   const zoomBy = (factor: number) => setView(zoomAt(view, view.x + view.w / 2, view.y + view.h / 2, factor, base))
   const isFitted = view.x === focus.x && view.y === focus.y && view.w === focus.w
@@ -374,12 +549,13 @@ export function MapView({
         className={`map ${zoomable ? 'zoomable' : ''} ${panning ? 'panning' : ''}`}
         style={{ aspectRatio: `${base.w} / ${base.h}` }}
         viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
-        role="img"
+        // With clickable states the map is a group of controls; otherwise it's a picture.
+        role={onPick ? 'group' : 'img'}
         aria-label={`Map of ${config.title}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
+        onPointerCancel={onPointerCancel}
         onPointerLeave={clearHover}
         onClickCapture={(e) => {
           // A drag-to-pan shouldn't also count as clicking the place it ended on.
@@ -394,7 +570,7 @@ export function MapView({
             insets?.transforms[s.id] ? null : (
               <g key={s.id}>
                 {hitArea(s.id)}
-                <path d={s.d} className={cls(s.id)} {...handlers(s.id)} />
+                <path d={s.d} className={cls(s.id)} {...handlers(s.id)} {...keyboard(s.id)} />
               </g>
             ),
           )}
@@ -415,7 +591,7 @@ export function MapView({
               return (
                 <g key={id} transform={`translate(${t.tx} ${t.ty}) scale(${t.s})`}>
                   {hitArea(id)}
-                  <path d={shapeById[id].d} className={cls(id)} {...handlers(id)} />
+                  <path d={shapeById[id].d} className={cls(id)} {...handlers(id)} {...keyboard(id)} />
                 </g>
               )
             })}
@@ -435,6 +611,7 @@ export function MapView({
                   height={c.height}
                   rx={4}
                   className={cls(c.id)}
+                  {...mouseOnly}
                   {...handlers(c.id)}
                 />
                 {label && (
@@ -451,7 +628,7 @@ export function MapView({
           {shapes.map((s) => {
             if (boxedIds.has(s.id) || !isActive(s.id)) return null
             const label = labelFor?.(s.id)
-            const [x, y] = labelPoint(s.id)
+            const [x, y] = capitals?.labelPos[s.id] ?? labelPoint(s.id)
             return label ? (
               <text key={s.id} className="label" x={x} y={y}>
                 {label}
@@ -459,6 +636,20 @@ export function MapView({
             ) : null
           })}
         </g>
+
+        {capitals && (
+          // Stars keep a steady on-screen size; names show for the chosen place, or for all once zoomed in.
+          <g className="capitals" style={{ fontSize: labelSize * 0.95 }}>
+            {Object.entries(capitals.stars).map(([id, [x, y]]) => (
+              <path key={id} className="capital-star" d={starPath(x, y, capitals.r)} {...handlers(id)} {...mouseOnly} />
+            ))}
+            {capitals.names.map((n) => (
+              <text key={n.id} className="capital-name" x={n.x} y={n.y} textAnchor={n.anchor}>
+                {n.text}
+              </text>
+            ))}
+          </g>
+        )}
       </svg>
 
       <div ref={tipRef} className={`tooltip ${tooltip ? 'show' : ''}`} aria-hidden>

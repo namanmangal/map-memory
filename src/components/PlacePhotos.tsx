@@ -17,7 +17,7 @@ function byline(img: PlaceImage): string | null {
  * A row of thumbnails (e.g. flower, bird, landmark). Clicking one opens a larger view
  * with the photo's credit and license, as Wikimedia Commons' licenses require.
  */
-export function PlacePhotos({ images, placeName }: { images: PlaceImage[]; placeName: string }) {
+export function PlacePhotos({ images, placeName, title }: { images: PlaceImage[]; placeName: string; title: string }) {
   const [openIndex, setOpenIndex] = useState<number | null>(null)
   const thumbRefs = useRef<(HTMLButtonElement | null)[]>([])
   // Return focus to the thumbnail of the photo being viewed, so keyboard users keep their place.
@@ -31,8 +31,10 @@ export function PlacePhotos({ images, placeName }: { images: PlaceImage[]; place
   const shown = images.filter((img) => !failed.has(img.src))
   if (shown.length === 0) return null
 
+  // The heading lives here so the whole section disappears if every photo fails to load.
   return (
-    <>
+    <section className="photo-gallery" aria-label={`Photos of ${placeName}`}>
+      <h2>{title}</h2>
       <ul className="photo-strip">
         {shown.map((img, i) => (
           <li key={img.src}>
@@ -76,7 +78,7 @@ export function PlacePhotos({ images, placeName }: { images: PlaceImage[]; place
           onClose={close}
         />
       )}
-    </>
+    </section>
   )
 }
 
@@ -94,6 +96,7 @@ function Lightbox({
   onClose: () => void
 }) {
   const img = images[index]
+  const [largeFailed, setLargeFailed] = useState<Set<string>>(new Set())
   const closeRef = useRef<HTMLButtonElement>(null)
   const figureRef = useRef<HTMLElement>(null)
   const go = (step: number) => onIndex((index + step + images.length) % images.length)
@@ -136,7 +139,12 @@ function Lightbox({
         <button ref={closeRef} className="lightbox-close" onClick={onClose} aria-label="Close">
           ×
         </button>
-        <img src={img.large} alt={`${img.kind} of ${placeName}: ${img.caption}`} />
+        <img
+          src={largeFailed.has(img.large) ? img.src : img.large}
+          alt={`${img.kind} of ${placeName}: ${img.caption}`}
+          // If the large version fails, show the gallery-size image (which already loaded) instead.
+          onError={() => setLargeFailed((f) => (f.has(img.large) ? f : new Set(f).add(img.large)))}
+        />
         <figcaption>
           <div className="lightbox-title">
             <span className="muted">{img.kind}</span> <strong>{img.caption}</strong>

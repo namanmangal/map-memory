@@ -1,3 +1,4 @@
+import { geoAlbersUsa } from 'd3-geo'
 import type { Topology } from 'topojson-specification'
 import type { DatasetConfig, Place, PlaceImage } from '../types'
 
@@ -30,8 +31,11 @@ const usStates: DatasetConfig = {
     height: 20,
   },
   insets: ['02', '15'], // Alaska, Hawaii
+  // us-atlas's albers files are drawn with this projection, so capitals land in the right place.
+  pointProjection: geoAlbersUsa().scale(1300).translate([487.5, 305]),
   loadTopology: () => import('us-atlas/states-albers-10m.json').then((m) => m.default as unknown as Topology),
-  loadPlaces: () => import('./places.json').then((m) => m.default as Place[]),
+  // JSON arrays type as number[]; capitalLocation is always a [longitude, latitude] pair.
+  loadPlaces: () => import('./places.json').then((m) => m.default as unknown as Place[]),
   // Flower, bird and landmark photos from Wikimedia Commons, verified against Wikipedia's state lists.
   loadImages: () => import('./images.json').then((m) => m.default as Record<string, PlaceImage[]>),
 }

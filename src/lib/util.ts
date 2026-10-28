@@ -7,11 +7,16 @@ export function shuffle<T>(items: T[]): T[] {
   return a
 }
 
-/** Lowercase, strip punctuation and collapse whitespace, so "new  york." matches "New York". */
+/**
+ * Lowercase, fold accents, strip punctuation and collapse whitespace, so "new  york." matches
+ * "New York" and "sao tome" matches "São Tomé". Letters from any language are kept.
+ */
 export function normalize(text: string): string {
   return text
+    .normalize('NFKD')
+    .replace(/\p{M}+/gu, '') // drop combining accents: "é" -> "e"
     .toLowerCase()
-    .replace(/[^a-z\s]/g, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
