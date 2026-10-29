@@ -20,9 +20,17 @@
   --bad-text: #b3261e;
   --second: #d9b02a;
   --third: #e8772e;
-  --bad: #d64545;
+  /* Slightly deep red so white map labels on it reach 4.7:1 */
+  --bad: #cd4242;
   --target: #2f5bd3;
   --target-hover: #1f3f9e;
+  /* Label text on colored states, chosen for contrast with each fill */
+  --label-on-target: #ffffff;
+  --label-on-good: #14130f;
+  --label-on-second: #14130f;
+  --label-on-third: #14130f;
+  --label-on-bad: #ffffff;
+  --label-on-unseen: #14130f;
   --unseen: #c9c4b8;
 
   --radius: 10px;
@@ -61,6 +69,12 @@
   --bad: #e86060;
   --target: #7c9cf0;
   --target-hover: #a9c0fa;
+  --label-on-target: #14130f;
+  --label-on-good: #14130f;
+  --label-on-second: #14130f;
+  --label-on-third: #14130f;
+  --label-on-bad: #14130f;
+  --label-on-unseen: #ffffff;
   --unseen: #57534b;
 }
 
@@ -302,8 +316,38 @@ h1 {
   cursor: pointer;
 }
 
-.place:focus-visible {
+/* Labels on colored states: no halo (on color it reads as a smudge), and a text color picked for
+   contrast with that fill. Plain states keep the halo, which helps on the gray map. */
+.label:is(.selected, .target, .first, .just-placed, .second, .third, .missed, .wrong, .m-high, .m-mid, .m-low, .m-unseen) {
+  stroke: none;
+}
+.label:is(.selected, .target) {
+  fill: var(--label-on-target);
+}
+.label:is(.first, .just-placed, .m-high) {
+  fill: var(--label-on-good);
+}
+.label:is(.second, .m-mid) {
+  fill: var(--label-on-second);
+}
+.label.third {
+  fill: var(--label-on-third);
+}
+.label:is(.missed, .wrong, .m-low) {
+  fill: var(--label-on-bad);
+}
+.label.m-unseen {
+  fill: var(--label-on-unseen);
+}
+
+/* The browser's own focus ring is a rectangle around the shape's bounding box, which looks wrong on
+   a state (and shows on mouse clicks in some browsers). Keyboard focus is shown on the state's own
+   border instead. */
+.place:focus {
   outline: none;
+}
+
+.place:focus-visible {
   stroke: var(--accent);
   stroke-width: 3;
 }
@@ -412,10 +456,16 @@ h1 {
   fill: var(--text);
   dominant-baseline: central;
   pointer-events: none;
-  paint-order: stroke;
-  stroke: var(--land);
-  stroke-width: 0.25em;
-  stroke-opacity: 0.8;
+}
+
+/* The tag behind a capital's name: the card color, slightly see-through, so the name reads the same
+   on any state color or over the ocean. */
+.capital-tag rect {
+  fill: var(--surface);
+  fill-opacity: 0.88;
+  stroke: var(--border);
+  stroke-width: 0.06em;
+  pointer-events: none;
 }
 
 .label {

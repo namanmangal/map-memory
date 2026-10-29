@@ -18,32 +18,42 @@ function byline(img: PlaceImage): string | null {
  * with the photo's credit and license, as Wikimedia Commons' licenses require.
  */
 export function PlacePhotos({ images, placeName, title }: { images: PlaceImage[]; placeName: string; title: string }) {
-  const [openIndex, setOpenIndex] = useState<number | null>(null)
-  const thumbRefs = useRef<(HTMLButtonElement | null)[]>([])
-  // Return focus to the thumbnail of the photo being viewed, so keyboard users keep their place.
-  const close = () => {
-    const i = openIndex
-    setOpenIndex(null)
-    if (i !== null) thumbRefs.current[i]?.focus()
-  }
+  // The open photo and the thumbnail buttons are tracked by src, not position, so a thumbnail
+  // failing elsewhere in the row can't shift which photo is open.
+  const [openSrc, setOpenSrc] = useState<string | null>(null)
+  const thumbRefs = useRef(new Map<string, HTMLButtonElement>())
   // Hide any photo whose link has broken (e.g. removed from Commons) rather than show a broken image.
   const [failed, setFailed] = useState<Set<string>>(new Set())
   const shown = images.filter((img) => !failed.has(img.src))
-  if (shown.length === 0) return null
+  // The viewer keeps the open photo even if its own thumbnail fails meanwhile.
+  const viewable = images.filter((img) => !failed.has(img.src) || img.src === openSrc)
+  const openIndex = openSrc === null ? -1 : viewable.findIndex((img) => img.src === openSrc)
+
+  // Return focus to the thumbnail of the photo being viewed (or the first one left), so keyboard
+  // users keep their place.
+  const close = () => {
+    const src = openSrc
+    setOpenSrc(null)
+    const thumb = (src !== null && !failed.has(src) && thumbRefs.current.get(src)) || thumbRefs.current.get(shown[0]?.src ?? '')
+    thumb?.focus()
+  }
+
+  if (shown.length === 0 && openIndex === -1) return null
 
   // The heading lives here so the whole section disappears if every photo fails to load.
   return (
     <section className="photo-gallery" aria-label={`Photos of ${placeName}`}>
       <h2>{title}</h2>
       <ul className="photo-strip">
-        {shown.map((img, i) => (
+        {shown.map((img) => (
           <li key={img.src}>
             <button
               ref={(el) => {
-                thumbRefs.current[i] = el
+                if (el) thumbRefs.current.set(img.src, el)
+                else thumbRefs.current.delete(img.src)
               }}
               className={`photo-thumb ${img.plain ? 'plain' : ''}`}
-              onClick={() => setOpenIndex(i)}
+              onClick={() => setOpenSrc(img.src)}
               aria-label={`${img.kind}: ${img.caption} — open larger ${img.plain ? 'image' : 'photo'}`}
             >
               {/* Blurred copy fills the tile behind the whole, uncropped photo */}
@@ -69,12 +79,12 @@ export function PlacePhotos({ images, placeName, title }: { images: PlaceImage[]
           </li>
         ))}
       </ul>
-      {openIndex !== null && shown[openIndex] && (
+      {openIndex !== -1 && (
         <Lightbox
-          images={shown}
+          images={viewable}
           index={openIndex}
           placeName={placeName}
-          onIndex={setOpenIndex}
+          onIndex={(i) => setOpenSrc(viewable[i].src)}
           onClose={close}
         />
       )}

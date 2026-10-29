@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useDataset } from '../datasets/dataset'
 import { boundsOf, type Bounds } from './geo'
 
@@ -41,6 +41,33 @@ type Box = { x: number; y: number; w: number; h: number }
 const MAX_ZOOM = 8
 /** Every capital's name is shown once zoomed in at least this far (scale = view width / full width) */
 const CAPITAL_NAMES_SCALE = 0.4
+
+/**
+ * Width of a capital name, measured exactly as the map draws it: a hidden SVG <text> with the same
+ * class and the same font size, so placement, collision checks and the visible tag all agree. (The
+ * size matters: system fonts like SF Pro draw small text wider than large text.) Cached.
+ */
+const textWidths = new Map<string, number>()
+let measureText: SVGTextElement | undefined
+function capitalNameWidth(text: string, fontSize: number): number {
+  const key = `${fontSize.toFixed(2)}|${text}`
+  const cached = textWidths.get(key)
+  if (cached !== undefined) return cached
+  if (!measureText) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.setAttribute('aria-hidden', 'true')
+    svg.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;visibility:hidden'
+    measureText = document.createElementNS('http://www.w3.org/2000/svg', 'text')
+    measureText.setAttribute('class', 'capital-name')
+    svg.appendChild(measureText)
+    document.body.appendChild(svg)
+  }
+  measureText.style.fontSize = `${fontSize}px`
+  measureText.textContent = text
+  const width = measureText.getBBox().width || text.length * 0.64 * fontSize
+  textWidths.set(key, width)
+  return width
+}
 
 /** A five-pointed star centered on (cx, cy) */
 function starPath(cx: number, cy: number, r: number): string {
@@ -438,6 +465,22 @@ export function MapView({
   const boxedIds = new Set(shownCallouts.map((c) => c.id))
   const capitals = showCapitals ? layoutCapitals() : null
 
+  // Fit each capital's tag to its name as actually drawn (before paint), with even padding. The
+  // layout's estimate is used for collision checks; this makes the visible tag snug and centered.
+  useLayoutEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+    for (const tag of svg.querySelectorAll<SVGGElement>('.capital-tag')) {
+      const text = tag.querySelector('text')
+      const rect = tag.querySelector('rect')
+      if (!text || !rect) continue
+      const box = text.getBBox()
+      const padX = Number(tag.dataset.pad)
+      rect.setAttribute('x', String(box.x - padX))
+      rect.setAttribute('width', String(box.width + padX * 2))
+    }
+  })
+
   /**
    * Places capital stars and names so nothing covers anything else: a state label that would sit
    * on a star moves just below or above it, and each name takes the first spot (right, left,
@@ -470,7 +513,7 @@ export function MapView({
 
     const stars: Record<string, [number, number]> = {}
     const labelPos: Record<string, [number, number]> = {}
-    const names: { id: string; text: string; x: number; y: number; anchor: 'start' | 'end' | 'middle' }[] = []
+    const names: { id: string; text: string; x: number; y: number; rect: Rect }[] = []
     const taken: Rect[] = []
 
     for (const s of shapes) {
@@ -509,16 +552,18 @@ export function MapView({
       const text = byId[s.id].capital
       if (!star || !text || !(s.id === namedCapital || scale <= CAPITAL_NAMES_SCALE)) continue
       const [x, y] = star
-      const w = text.length * 0.58 * nameFs + pad * 2
+      // The box is also the name's visible tag: the name's measured width plus even padding.
+      const padX = nameFs * 0.3
+      const w = capitalNameWidth(text, nameFs) + padX * 2
       const h = nameFs * 1.2 + pad * 2
       const gap = r * 1.4
       const spots = [
-        { x: x + gap, y, anchor: 'start' as const, rect: [x + gap, y - h / 2, x + gap + w, y + h / 2] as Rect },
-        { x: x - gap, y, anchor: 'end' as const, rect: [x - gap - w, y - h / 2, x - gap, y + h / 2] as Rect },
-        { x, y: y - gap - h / 2, anchor: 'middle' as const, rect: [x - w / 2, y - gap - h, x + w / 2, y - gap] as Rect },
-        { x, y: y + gap + h / 2, anchor: 'middle' as const, rect: [x - w / 2, y + gap, x + w / 2, y + gap + h] as Rect },
-        { x: x + gap * 0.7, y: y - gap - h / 2, anchor: 'start' as const, rect: [x + gap * 0.7, y - gap - h, x + gap * 0.7 + w, y - gap] as Rect },
-        { x: x + gap * 0.7, y: y + gap + h / 2, anchor: 'start' as const, rect: [x + gap * 0.7, y + gap, x + gap * 0.7 + w, y + gap + h] as Rect },
+        { rect: [x + gap, y - h / 2, x + gap + w, y + h / 2] as Rect }, // right
+        { rect: [x - gap - w, y - h / 2, x - gap, y + h / 2] as Rect }, // left
+        { rect: [x - w / 2, y - gap - h, x + w / 2, y - gap] as Rect }, // above
+        { rect: [x - w / 2, y + gap, x + w / 2, y + gap + h] as Rect }, // below
+        { rect: [x + gap * 0.7, y - gap - h, x + gap * 0.7 + w, y - gap] as Rect }, // above right
+        { rect: [x + gap * 0.7, y + gap, x + gap * 0.7 + w, y + gap + h] as Rect }, // below right
       ]
       // Clear of labels, names already placed, and every other capital's star; failing that, a name
       // may cover a neighbor's star but never a label or another name.
@@ -529,9 +574,11 @@ export function MapView({
         spots.find((p) => clear(p, taken)) ??
         leastCovering(spots, (p) => p.rect, taken, otherStars)
       taken.push(spot.rect)
-      names.push({ id: s.id, text, x: spot.x, y: spot.y, anchor: spot.anchor })
+      // Text is centered in its tag, so the padding is even on both sides.
+      const [rx0, ry0, rx1, ry1] = spot.rect
+      names.push({ id: s.id, text, x: (rx0 + rx1) / 2, y: (ry0 + ry1) / 2, rect: spot.rect })
     }
-    return { stars, labelPos, names, r }
+    return { stars, labelPos, names, r, padX: labelSize * 0.95 * 0.3 }
   }
 
   const zoomBy = (factor: number) => setView(zoomAt(view, view.x + view.w / 2, view.y + view.h / 2, factor, base))
@@ -615,7 +662,7 @@ export function MapView({
                   {...handlers(c.id)}
                 />
                 {label && (
-                  <text className="label" x={c.x + c.width / 2} y={c.y + c.height / 2}>
+                  <text className={`label ${classFor?.(c.id) ?? ''}`} x={c.x + c.width / 2} y={c.y + c.height / 2}>
                     {label}
                   </text>
                 )}
@@ -630,7 +677,8 @@ export function MapView({
             const label = labelFor?.(s.id)
             const [x, y] = capitals?.labelPos[s.id] ?? labelPoint(s.id)
             return label ? (
-              <text key={s.id} className="label" x={x} y={y}>
+              // The state's class (selected, result, mastery…) lets the label pick a readable color for that fill.
+              <text key={s.id} className={`label ${classFor?.(s.id) ?? ''}`} x={x} y={y}>
                 {label}
               </text>
             ) : null
@@ -644,9 +692,19 @@ export function MapView({
               <path key={id} className="capital-star" d={starPath(x, y, capitals.r)} {...handlers(id)} {...mouseOnly} />
             ))}
             {capitals.names.map((n) => (
-              <text key={n.id} className="capital-name" x={n.x} y={n.y} textAnchor={n.anchor}>
-                {n.text}
-              </text>
+              // A small tag behind the name keeps it readable on any state color, or over the ocean.
+              <g key={n.id} className="capital-tag" data-pad={capitals.padX}>
+                <rect
+                  x={n.rect[0]}
+                  y={n.rect[1]}
+                  width={n.rect[2] - n.rect[0]}
+                  height={n.rect[3] - n.rect[1]}
+                  rx={(n.rect[3] - n.rect[1]) / 3}
+                />
+                <text className="capital-name" x={n.x} y={n.y} textAnchor="middle">
+                  {n.text}
+                </text>
+              </g>
             ))}
           </g>
         )}
