@@ -1,4 +1,4 @@
-import { feature } from 'topojson-client'
+import { feature, neighbors as topoNeighbors } from 'topojson-client'
 import { geoPath } from 'd3-geo'
 import type { GeometryCollection, Topology } from 'topojson-specification'
 import type { DatasetConfig, Place } from '../datasets/types'
@@ -49,6 +49,16 @@ export function buildMap(config: DatasetConfig, topology: Topology, places: Plac
 
   const shapeById: Record<string, Shape> = Object.fromEntries(shapes.map((s) => [s.id, s]))
 
+  // Places that share a border, read from the shared arcs in the topology. Shapes that aren't places
+  // (e.g. DC in us-atlas) are left out, on both sides.
+  const geometryIds = object.geometries.map((g) => String(g.id))
+  const neighborIds: Record<string, string[]> = {}
+  topoNeighbors(object.geometries).forEach((adjacent, i) => {
+    const id = geometryIds[i]
+    if (!known.has(id)) return
+    neighborIds[id] = [...new Set(adjacent.map((j) => geometryIds[j]).filter((n) => known.has(n) && n !== id))]
+  })
+
   const layout = config.callouts
   const callouts: Callout[] = layout
     ? layout.ids.map((id, i) => ({
@@ -61,7 +71,7 @@ export function buildMap(config: DatasetConfig, topology: Topology, places: Plac
       }))
     : []
 
-  return { shapes, shapeById, callouts }
+  return { shapes, shapeById, callouts, neighbors: neighborIds }
 }
 
 /** Smallest box containing the given places, including their callout boxes. */

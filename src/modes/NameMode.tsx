@@ -72,15 +72,31 @@ function AskQuiz({ active, ask }: ModeProps & { ask: Ask }) {
 /** Places this quiz can ask about: every place for names, only places with a capital for capitals. */
 const canAsk = (ask: Ask) => (p: Place) => ask === 'name' || Boolean(p.capital)
 
-/** Three wrong options drawn from the nearest neighbors, so the choice isn't trivial. */
+/**
+ * Three wrong options that are easy to confuse with the answer: places bordering it first, then
+ * places bordering those, then (for islands, or places with few neighbors) the nearest others.
+ * Each tier is shuffled, so the same place gets different options from run to run. Only places the
+ * quiz can ask about are candidates, filtered before anything is cut, so there are always three
+ * wrong options when the quiz has three other places to offer.
+ */
 function choicesFor(ds: LoadedDataset, id: string, ask: Ask): string[] {
-  const nearby = ds.places
-    .filter(canAsk(ask))
+  const askable = (other: string) => other !== id && canAsk(ask)(ds.byId[other])
+  const borders = (ds.neighbors[id] ?? []).filter(askable)
+  const twoAway = [...new Set((ds.neighbors[id] ?? []).flatMap((n) => ds.neighbors[n] ?? []))].filter(
+    (n) => askable(n) && !borders.includes(n),
+  )
+  const byDistance = ds.places
     .map((p) => p.id)
-    .filter((other) => other !== id)
+    .filter(askable)
     .sort((a, b) => ds.distance(id, a) - ds.distance(id, b))
-    .slice(0, 7)
-  return shuffle([id, ...shuffle(nearby).slice(0, 3)])
+  const picked: string[] = []
+  // The last tier is the rest of the list, nearest first and unshuffled: a final fallback only.
+  for (const tier of [shuffle(borders), shuffle(twoAway), shuffle(byDistance.slice(0, 7)), byDistance]) {
+    for (const other of tier) {
+      if (picked.length < 3 && !picked.includes(other)) picked.push(other)
+    }
+  }
+  return shuffle([id, ...picked])
 }
 
 type Check = 'right' | 'typo' | 'wrong'

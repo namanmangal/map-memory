@@ -6,9 +6,9 @@ A web app for learning maps, starting with the 50 US states.
 
 - **Explore**: hover a state for its name and capital; click it (or pick it from the A–Z / by-region list) to zoom in and see its capital, facts, a few "Did you know?" fun facts with links to their sources, and four photos: state flag, flower, bird and a famous landmark. Capitals are marked with ★, with names shown for the selected state and once zoomed in. "Color by how well I know them" shades each state by your quiz results.
 - **Find it**: you're given a name; click the state.
-- **Name it**: a state is highlighted; type its name or pick from four nearby options.
+- **Name it**: a state is highlighted; type its name or pick from four options. The wrong options are bordering states where possible, so they're easy to mix up.
 - **Drag & drop**: drag every name onto its state, or tap a name, then tap the state.
-- **Capitals**: a state is highlighted and named; type its capital or pick from four nearby capitals. Or switch to **On the map**: you're given a capital and click its state. Only shown for maps that have capital data.
+- **Capitals**: a state is highlighted and named; type its capital or pick from four, where the wrong ones are capitals of bordering states where possible. Or switch to **On the map**: you're given a capital and click its state. Only shown for maps that have capital data.
 - **History**: every finished quiz run, newest first, filterable by quiz and region. Expand a run to see which states you got on the 1st, 2nd or 3rd try or didn't get.
 - **Region badges**: ace a quiz in a region (every state on the first try — for Capitals, every state that has a capital — in a full run of that region or of the whole map) and the region earns a 🏅 badge for that quiz. Badges show on the region headings in Explore's list (switch it to **By region**).
 

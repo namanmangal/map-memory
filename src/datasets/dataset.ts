@@ -14,7 +14,9 @@ export type LoadedDataset = {
   idsForGroup: (group: string) => string[]
   /** Whether places have capitals (enables the Capitals quiz and capital UI) */
   hasCapitals: boolean
-  /** Distance between label points, used to pick nearby (confusable) wrong answers */
+  /** Places sharing a border with each place (none for islands), used to pick confusable wrong answers */
+  neighbors: Record<string, string[]>
+  /** Distance between label points, used to pick nearby wrong answers when there aren't enough neighbors */
   distance: (a: string, b: string) => number
 }
 
@@ -29,7 +31,7 @@ export async function loadDataset(config: DatasetConfig): Promise<LoadedDataset>
     }),
   ])
   const places = loadedPlaces.map((p) => (images[p.id] ? { ...p, images: images[p.id] } : p))
-  const { shapes, shapeById, callouts } = buildMap(config, topology, places)
+  const { shapes, shapeById, callouts, neighbors } = buildMap(config, topology, places)
   return {
     config,
     places,
@@ -39,6 +41,7 @@ export async function loadDataset(config: DatasetConfig): Promise<LoadedDataset>
     callouts,
     idsForGroup: (group) => places.filter((p) => group === ALL_GROUPS || p.group === group).map((p) => p.id),
     hasCapitals: places.some((p) => p.capital),
+    neighbors,
     distance: (a, b) => {
       const [ax, ay] = shapeById[a].label
       const [bx, by] = shapeById[b].label
