@@ -21,6 +21,9 @@ export type GameProps = {
   onFinish: () => void
 }
 
+/** What a quiz asks about each place: its name or its capital */
+export type Ask = 'name' | 'capital'
+
 /** Props every tab gets; tabs stay mounted when hidden so switching doesn't lose progress */
 export type ModeProps = {
   active: boolean
@@ -57,7 +60,9 @@ export function QuizShell({
   const totalCount = ds.places.filter((p) => canAsk(p.id)).length
   const ids = practiceIds ?? groupIds
   const bestKey = practiceIds ? undefined : `${mode}:${group}`
-  const best = bestKey ? loadBest(ds.config.id, bestKey) : undefined
+  // A best over a different number of places is from before the region changed: don't show it.
+  const stored = bestKey ? loadBest(ds.config.id, bestKey) : undefined
+  const best = stored?.total === ids.length ? stored : undefined
 
   const restart = (next?: string[]) => {
     // Started from a practice list (even one covering every state) → practice: labeled, never a best score.

@@ -14,6 +14,7 @@ const QUIZ_LABELS: Record<string, string> = {
   drag: 'Drag & drop',
   'capital-type': 'Capitals · Type',
   'capital-choose': 'Capitals · Choose',
+  'capital-map': 'Capitals · On the map',
 }
 
 const ALL = 'all'

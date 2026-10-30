@@ -1,47 +1,67 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { useDataset, type LoadedDataset } from '../datasets/dataset'
 import type { Place } from '../datasets/types'
 import { MapView } from '../map/MapView'
 import { playSound } from '../lib/sound'
 import { levenshtein, normalize, shuffle } from '../lib/util'
-import { QuizShell, type GameProps, type ModeProps } from './QuizShell'
+import { FindGame } from './FindMode'
+import { QuizShell, type Ask, type GameProps, type ModeProps } from './QuizShell'
 import { QuizPaused, QuizStart } from './QuizStart'
 import { QuizTimer } from './QuizTimer'
 import { ResultLegend, Summary } from './Summary'
 import { MAX_ATTEMPTS, resultFor, useQuizRun } from './useQuizRun'
 
-type InputStyle = 'type' | 'choose'
+/** How to answer: type it, pick from four, or click the place on the map */
+type InputStyle = 'type' | 'choose' | 'map'
 
-const STYLES: InputStyle[] = ['type', 'choose']
+const STYLE_LABELS: Record<InputStyle, string> = { type: 'Type', choose: 'Choose', map: 'On the map' }
 
-/** What the quiz asks for about the highlighted place */
-type Ask = 'name' | 'capital'
+/** Name it has no "On the map" style: that's what Find it is. */
+const stylesFor = (ask: Ask): InputStyle[] => (ask === 'name' ? ['type', 'choose'] : ['type', 'choose', 'map'])
 
 /** A place is highlighted — type or pick its name. */
 export function NameMode(props: ModeProps) {
   return <AskQuiz {...props} ask="name" />
 }
 
-/** A place is highlighted and named — type or pick its capital. */
+/** A place is highlighted and named — type or pick its capital; or click the place with a given capital. */
 export function CapitalMode(props: ModeProps) {
   return <AskQuiz {...props} ask="capital" />
 }
 
+
 /**
- * Type and Choose are separate quizzes, each with its own region, progress, timer and best
- * score; both stay mounted so switching between them doesn't lose either run.
+ * Each answer style is a separate quiz, with its own region, progress, timer and best score; all
+ * stay mounted so switching between them doesn't lose any run.
  */
 function AskQuiz({ active, ask }: ModeProps & { ask: Ask }) {
   const [style, setStyle] = useState<InputStyle>('type')
+  const styles = stylesFor(ask)
+  // Shown in every style's prompt row, before starting too, so you can pick how to answer first.
+  const styleToggle = (
+    <span className="segmented" role="group" aria-label="How to answer">
+      {styles.map((s) => (
+        <button key={s} className={style === s ? 'on' : ''} aria-pressed={style === s} onClick={() => setStyle(s)}>
+          {STYLE_LABELS[s]}
+        </button>
+      ))}
+    </span>
+  )
   return (
     <>
-      {STYLES.map((s) => (
+      {styles.map((s) => (
         <div key={s} hidden={style !== s}>
           <QuizShell
             mode={`${ask}-${s}`}
             active={active && style === s}
             eligible={canAsk(ask)}
-            render={(props) => <NameGame {...props} ask={ask} style={s} onStyle={setStyle} />}
+            render={(props) =>
+              s === 'map' ? (
+                <FindGame {...props} ask={ask} styleToggle={styleToggle} />
+              ) : (
+                <NameGame {...props} ask={ask} style={s} styleToggle={styleToggle} />
+              )
+            }
           />
         </div>
       ))}
@@ -92,8 +112,8 @@ function NameGame({
   onRestart,
   ask,
   style,
-  onStyle,
-}: GameProps & { ask: Ask; style: InputStyle; onStyle: (s: InputStyle) => void }) {
+  styleToggle,
+}: GameProps & { ask: Ask; style: Exclude<InputStyle, 'map'>; styleToggle: ReactNode }) {
   const ds = useDataset()
   /** The answer for a place: its name, or its capital */
   const answerOf = (id: string) => (ask === 'capital' ? (ds.byId[id].capital ?? '') : ds.byId[id].name)
@@ -149,7 +169,7 @@ function NameGame({
     const answer = answerOf(current)
     // The state's abbreviation is accepted for its name, not for its capital.
     const others = new Set(ds.places.filter((p) => p.id !== current).map((p) => canonical(answerOf(p.id))))
-    const result = checkTyped(typed, answer, others, ask === 'name' ? place.code : undefined)
+    const result = checkTyped(typed, answer, others, ask === 'capital' ? undefined : place.code)
     if (result === 'wrong') {
       playSound('wrong')
       setNote(`Not ${typed.trim()}`)
@@ -163,18 +183,6 @@ function NameGame({
 
   // Before starting, and while paused, don't highlight the current question.
   const classFor = (id: string) => (!started ? undefined : id === current && live ? 'target' : results[id])
-
-  // Available before starting too, so you can pick how to answer first.
-  const styleToggle = (
-    <span className="segmented" role="group" aria-label="How to answer">
-      <button className={style === 'type' ? 'on' : ''} aria-pressed={style === 'type'} onClick={() => onStyle('type')}>
-        Type
-      </button>
-      <button className={style === 'choose' ? 'on' : ''} aria-pressed={style === 'choose'} onClick={() => onStyle('choose')}>
-        Choose
-      </button>
-    </span>
-  )
 
   return (
     <div className="game">

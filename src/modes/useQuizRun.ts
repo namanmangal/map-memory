@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useDataset } from '../datasets/dataset'
-import { recordAnswer, saveBest, saveRun, type RunMeta } from '../lib/progress'
+import { recordAnswer, saveBest, saveRun, statsKindOf, type RunMeta } from '../lib/progress'
 
 /** How many tries it took; `missed` means the answer had to be shown. */
 export type Result = 'first' | 'second' | 'third' | 'missed'
@@ -87,7 +87,7 @@ export function useQuizRun(
     if (start === null || paused || !active || results[id]) return
     const next = { ...results, [id]: result }
     setResults(next)
-    recordAnswer(ds.config.id, id, result === 'first', meta.mode.startsWith('capital') ? 'capital' : 'place')
+    recordAnswer(ds.config.id, id, result === 'first', statsKindOf(meta.mode))
 
     if (Object.keys(next).length === ids.length) {
       const ms = Date.now() - start - pausedTotal.current

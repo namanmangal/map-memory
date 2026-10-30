@@ -8,7 +8,11 @@ export type Best = { correct: number; total: number; ms: number }
 /** Map quizzes (find, name, drag) and the Capitals quiz keep separate per-place stats. */
 export type StatsKind = 'place' | 'capital'
 const statsKey = (datasetId: string, kind: StatsKind = 'place') =>
-  kind === 'capital' ? `map-memory:${datasetId}:capital-stats` : `map-memory:${datasetId}:stats`
+  kind === 'place' ? `map-memory:${datasetId}:stats` : `map-memory:${datasetId}:${kind}-stats`
+
+/** Which stats a quiz `mode` (as stored with runs, e.g. "capital-map") records answers into. */
+export const statsKindOf = (mode: string): StatsKind =>
+  mode.startsWith('capital-') ? 'capital' : 'place'
 const bestKey = (datasetId: string) => `map-memory:${datasetId}:best`
 const runsKey = (datasetId: string) => `map-memory:${datasetId}:runs`
 
@@ -161,15 +165,25 @@ export function loadBest(datasetId: string, key: string): Best | undefined {
   return read(bestKey(datasetId), cleanBest)[key]
 }
 
+/** Every best score for a map, keyed by "mode:group" (e.g. "find:Northeast"). */
+export function loadAllBest(datasetId: string): Record<string, Best> {
+  return read(bestKey(datasetId), cleanBest)
+}
+
 /**
- * Saves the result if it beats the previous best (more correct, then faster). Returns true only if
- * it was a new best AND it was actually saved — so the app never claims a best it didn't keep.
+ * Saves the result if it beats the previous best (more correct, then faster). A previous best over a
+ * different number of places (the region has since gained or lost places) is out of date, so any
+ * result replaces it. Returns true only if it was a new best AND it was actually saved — so the app
+ * never claims a best it didn't keep.
  */
 export function saveBest(datasetId: string, key: string, result: Best): boolean {
   const all = read(bestKey(datasetId), cleanBest)
   const prev = all[key]
   const better =
-    !prev || result.correct > prev.correct || (result.correct === prev.correct && result.ms < prev.ms)
+    !prev ||
+    prev.total !== result.total ||
+    result.correct > prev.correct ||
+    (result.correct === prev.correct && result.ms < prev.ms)
   if (!better) return false
   all[key] = result
   return write(bestKey(datasetId), all)

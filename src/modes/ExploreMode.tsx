@@ -1,15 +1,59 @@
 import { useState } from 'react'
-import { ALL_GROUPS, useDataset } from '../datasets/dataset'
+import { ALL_GROUPS, useDataset, type LoadedDataset } from '../datasets/dataset'
+import type { Place } from '../datasets/types'
 import { MapView } from '../map/MapView'
 import { PlacePhotos } from '../components/PlacePhotos'
 import type { ModeProps } from './QuizShell'
-import { combineStats, hasProgress, loadStats, mastery, resetProgress } from '../lib/progress'
+import { combineStats, hasProgress, loadAllBest, loadStats, mastery, resetProgress, type Best } from '../lib/progress'
 
 function masteryClass(m: number | null): string {
   if (m === null) return 'm-unseen'
   if (m >= 0.8) return 'm-high'
   if (m >= 0.5) return 'm-mid'
   return 'm-low'
+}
+
+/** Quizzes a region can earn a badge in; each counts once, whichever answer style it was aced in. */
+function badgeQuizzes(
+  ds: LoadedDataset,
+): { label: string; modes: string[]; asks: (p: Place) => boolean; which?: string }[] {
+  return [
+    { label: 'Find it', modes: ['find'], asks: () => true },
+    { label: 'Name it', modes: ['name-type', 'name-choose'], asks: () => true },
+    { label: 'Drag & drop', modes: ['drag'], asks: () => true },
+    // Like the Capitals quiz itself, only places that have a capital count.
+    ...(ds.hasCapitals
+      ? [
+          {
+            label: 'Capitals',
+            modes: ['capital-type', 'capital-choose', 'capital-map'],
+            asks: (p: Place) => Boolean(p.capital),
+            which: 'with a capital',
+          },
+        ]
+      : []),
+  ]
+}
+
+/**
+ * Quizzes aced in a region: a best score with every place the quiz asks about right on the first
+ * try, in a full run of that region or of the whole map (which covers every region). A score only
+ * counts if it covered as many places as the quiz asks about now, so an old score from before a
+ * place was added doesn't earn a badge; and a region the quiz has nothing to ask about earns none.
+ */
+function acedIn(ds: LoadedDataset, best: Record<string, Best>, group: string) {
+  return badgeQuizzes(ds)
+    .filter((q) => {
+      const askedIn = (g: string) => ds.idsForGroup(g).filter((id) => q.asks(ds.byId[id])).length
+      const perfect = (g: string) => {
+        const expected = askedIn(g)
+        return q.modes.some((m) => {
+          const b = best[`${m}:${g}`]
+          return b !== undefined && b.correct === b.total && b.total === expected
+        })
+      }
+      return askedIn(group) > 0 && (perfect(group) || perfect(ALL_GROUPS))
+    })
 }
 
 /** Browse the map: hover for names, click for details, optionally color by how well you know each place. */
@@ -23,6 +67,7 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
   const [listOrder, setListOrder] = useState<'group' | 'alpha'>('alpha')
   const [placeStats, setPlaceStats] = useState(() => loadStats(ds.config.id))
   const [capitalStats, setCapitalStats] = useState(() => loadStats(ds.config.id, 'capital'))
+  const [best, setBest] = useState(() => loadAllBest(ds.config.id))
   const [resetFailed, setResetFailed] = useState(false)
   // Quizzes on other tabs record new stats, so re-read them whenever this tab is shown again.
   const [wasActive, setWasActive] = useState(active)
@@ -31,6 +76,7 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
     if (active) {
       setPlaceStats(loadStats(ds.config.id))
       setCapitalStats(loadStats(ds.config.id, 'capital'))
+      setBest(loadAllBest(ds.config.id))
     }
   }
   const [group, setGroup] = useState(ALL_GROUPS)
@@ -55,6 +101,12 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
   const stats = showCapitals ? combineStats(placeStats, capitalStats) : placeStats
   const stat = selected ? placeStats[selected] : undefined
   const capitalStat = selected ? capitalStats[selected] : undefined
+
+  // Badges earned per region (only regions in view), counted in the list's summary line.
+  const badges = Object.fromEntries(
+    ds.config.groups.filter((g) => allGroups || g === group).map((g) => [g, acedIn(ds, best, g)]),
+  )
+  const badgeCount = Object.values(badges).reduce((n, b) => n + b.length, 0)
 
   const classFor = (id: string) =>
     [id === selected && 'selected', byMastery ? masteryClass(mastery(stats[id])) : 'hoverable']
@@ -181,6 +233,13 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
           <details className="list">
             <summary>
               {allGroups ? `All ${groupIds.length}` : `${groupIds.length} ${group}`} {ds.config.noun.many}
+              {badgeCount > 0 && (
+                <span className="badge-count" title={`${badgeCount} region ${badgeCount === 1 ? 'badge' : 'badges'} — see them by ${ds.config.groupLabel.toLowerCase()}`}>
+                  {' '}
+                  · <span aria-hidden>🏅</span> {badgeCount}
+                  <span className="sr-only"> region {badgeCount === 1 ? 'badge' : 'badges'}</span>
+                </span>
+              )}
             </summary>
             <span className="segmented small" role="group" aria-label="List order">
               <button
@@ -212,6 +271,17 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
                       {g}
                       {group === g && <span aria-hidden> ×</span>}
                     </button>
+                    {badges[g].map(({ label: quiz, which }) => (
+                      <span
+                        key={quiz}
+                        className="badge"
+                        title={`Every ${g} ${ds.config.noun.one}${which ? ` ${which}` : ''} on the first try in ${quiz}`}
+                      >
+                        <span aria-hidden>🏅 </span>
+                        <span className="sr-only">Aced in </span>
+                        {quiz}
+                      </span>
+                    ))}
                   </h3>
                 )}
                 <ul>
@@ -246,6 +316,7 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
                 // Show what's actually stored now, rather than assuming the reset worked.
                 setPlaceStats(loadStats(ds.config.id))
                 setCapitalStats(loadStats(ds.config.id, 'capital'))
+                setBest(loadAllBest(ds.config.id))
                 setResetFailed(!cleared)
                 onProgressReset()
               }

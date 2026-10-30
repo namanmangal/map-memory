@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useDataset } from '../datasets/dataset'
 import { MapView } from '../map/MapView'
 import { playSound } from '../lib/sound'
 import { shuffle } from '../lib/util'
-import { QuizShell, type GameProps, type ModeProps } from './QuizShell'
+import { QuizShell, type Ask, type GameProps, type ModeProps } from './QuizShell'
 import { QuizPaused, QuizStart } from './QuizStart'
 import { QuizTimer } from './QuizTimer'
 import { ResultLegend, Summary } from './Summary'
@@ -14,7 +14,22 @@ export function FindMode({ active }: ModeProps) {
   return <QuizShell mode="find" active={active} render={(props) => <FindGame {...props} />} />
 }
 
-function FindGame({ ids, focusIds, bestKey, onRestart, active, autoStart, meta, onFinish }: GameProps) {
+/**
+ * Click the place on the map that matches the prompt: its name ("Click on Ohio") or its capital.
+ * Also used as the "On the map" style of the Capitals quiz.
+ */
+export function FindGame({
+  ids,
+  focusIds,
+  bestKey,
+  onRestart,
+  active,
+  autoStart,
+  meta,
+  onFinish,
+  ask = 'name',
+  styleToggle,
+}: GameProps & { ask?: Ask; styleToggle?: ReactNode }) {
   const ds = useDataset()
   const [queue] = useState(() => shuffle(ids))
   const { started, begin, paused, pauseReason, pause, resume, live, running, results, resolve, finish, elapsed, done } = useQuizRun(
@@ -31,6 +46,7 @@ function FindGame({ ids, focusIds, bestKey, onRestart, active, autoStart, meta, 
   const [wrongClicks, setWrongClicks] = useState(0)
 
   const current = queue.find((id) => !results[id])
+  const nameAndCapital = (id: string) => `${ds.byId[id].name}\nCapital: ${ds.byId[id].capital}`
   const revealed = mistakes >= MAX_ATTEMPTS
 
   useEffect(() => {
@@ -69,22 +85,42 @@ function FindGame({ ids, focusIds, bestKey, onRestart, active, autoStart, meta, 
     <div className="game">
       <div className="prompt" aria-live="polite">
         {!started ? (
-          <QuizStart count={ids.length} onStart={begin} />
+          <QuizStart count={ids.length} onStart={begin}>
+            {styleToggle}
+          </QuizStart>
         ) : paused ? (
-          <QuizPaused elapsed={elapsed()} reason={pauseReason} onResume={resume} />
-        ) : finish ? null : current ? (
+          <QuizPaused elapsed={elapsed()} reason={pauseReason} onResume={resume}>
+            {styleToggle}
+          </QuizPaused>
+        ) : finish ? (
+          styleToggle
+        ) : current ? (
           <>
             <span className="muted">
               {done + 1} of {ids.length}
             </span>
             <span className="ask">
-              Click on <strong>{ds.byId[current].name}</strong>
+              {ask === 'capital' ? (
+                <>
+                  Click the {ds.config.noun.one} whose capital is <strong>{ds.byId[current].capital}</strong>
+                </>
+              ) : (
+                <>
+                  Click on <strong>{ds.byId[current].name}</strong>
+                </>
+              )}
             </span>
             <span className="feedback">
-              {wrongId && !revealed && `That's ${ds.byId[wrongId].name}`}
+              {wrongId &&
+                !revealed &&
+                (ask === 'capital'
+                  ? `That's ${ds.byId[wrongId].name} — its capital is ${ds.byId[wrongId].capital}`
+                  : `That's ${ds.byId[wrongId].name}`)}
               {revealed && `It's flashing — click it to continue`}
               {!wrongId && !revealed && mistakes > 0 && `${MAX_ATTEMPTS - mistakes} tries left`}
             </span>
+            {/* Right before the timer, so both sit together at the right like Name it's */}
+            {styleToggle}
             <QuizTimer elapsed={elapsed} running={running} onPause={pause} />
           </>
         ) : null}
@@ -95,7 +131,7 @@ function FindGame({ ids, focusIds, bestKey, onRestart, active, autoStart, meta, 
         zoomable
         classFor={classFor}
         labelFor={(id) => (results[id] ? ds.byId[id].code : undefined)}
-        tooltipFor={(id) => (results[id] ? ds.byId[id].name : undefined)}
+        tooltipFor={(id) => (results[id] ? (ask === 'capital' ? nameAndCapital(id) : ds.byId[id].name) : undefined)}
         onPick={pick}
         // Keyboard buttons only while a question is live: unanswered states, or just the answer once revealed.
         canPick={(id) => live && !finish && !!current && !results[id] && (!revealed || id === current)}
