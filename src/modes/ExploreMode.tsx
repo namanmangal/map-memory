@@ -261,10 +261,49 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
         </aside>
       </div>
 
+      {/* Full width under the map, so the facts sit side by side instead of lengthening the info card */}
+      {place?.funFacts && place.funFacts.length > 0 && (
+        <section className="fun-facts" aria-labelledby="fun-facts-heading">
+          <h2 id="fun-facts-heading">Did you know?</h2>
+          <ul>
+            {place.funFacts.map((f) => (
+              <li key={f.text}>
+                {f.text}{' '}
+                <a href={f.source} target="_blank" rel="noreferrer" className="source" aria-label={`Source: ${sourceName(f.source)}`}>
+                  Source
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {/* Full width under the map, where the photos have room to be seen */}
       {place?.images && (
         <PlacePhotos key={place.id} images={place.images} placeName={place.name} title={`${place.name} in pictures`} />
       )}
     </div>
   )
+}
+
+/**
+ * Names a source for screen readers: "https://en.wikipedia.org/wiki/Mount_Washington" → "Mount Washington (Wikipedia)".
+ * Any other site is named by its host ("www.nps.gov"); a malformed URL is read out as given.
+ */
+function sourceName(url: string) {
+  let u: URL
+  try {
+    u = new URL(url)
+  } catch {
+    return url
+  }
+  const m = /^\/wiki\/(.+)$/.exec(u.pathname)
+  if (u.hostname !== 'en.wikipedia.org' || !m) return u.hostname
+  let title = m[1]
+  try {
+    title = decodeURIComponent(title)
+  } catch {
+    // Malformed percent-encoding: keep the raw title rather than crash the render.
+  }
+  return `${title.replace(/_/g, ' ')} (Wikipedia)`
 }

@@ -15,6 +15,8 @@ export type Place = {
   group: string
   /** Free-form extras shown on the Explore info card, in order */
   facts?: Record<string, string>
+  /** Short "Did you know?" trivia for the Explore info card, each with the page it was checked against */
+  funFacts?: { text: string; source: string }[]
   /** Photos shown on the Explore info card (loaded from the dataset's images file) */
   images?: PlaceImage[]
 }

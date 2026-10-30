@@ -4,7 +4,7 @@ A web app for learning maps, starting with the 50 US states.
 
 ## Modes
 
-- **Explore**: hover a state for its name and capital; click it (or pick it from the A–Z / by-region list) to zoom in and see its capital, facts and four photos: state flag, flower, bird and a famous landmark. Capitals are marked with ★, with names shown for the selected state and once zoomed in. "Color by how well I know them" shades each state by your quiz results.
+- **Explore**: hover a state for its name and capital; click it (or pick it from the A–Z / by-region list) to zoom in and see its capital, facts, a few "Did you know?" fun facts with links to their sources, and four photos: state flag, flower, bird and a famous landmark. Capitals are marked with ★, with names shown for the selected state and once zoomed in. "Color by how well I know them" shades each state by your quiz results.
 - **Find it**: you're given a name; click the state.
 - **Name it**: a state is highlighted; type its name or pick from four nearby options.
 - **Drag & drop**: drag every name onto its state, or tap a name, then tap the state.
@@ -49,6 +49,7 @@ Each map is a self-contained dataset under `src/datasets/<id>/`, registered in `
   - `name`, `code` and `group` (region or continent) are required.
   - `capital` and `capitalLocation` (`[longitude, latitude]`) are optional.
   - `facts` is an optional list of extras shown in Explore.
+  - `funFacts` is an optional list of `{ text, source }` trivia for Explore's "Did you know?" section, where `source` is the page the fact was checked against.
 
   The Capitals quiz, the capital stars and the other capital controls appear only when places have a `capital`. Places without one are left out of the Capitals quiz.
 - **`index.ts`** holds a `DatasetConfig`:
@@ -64,6 +65,7 @@ Each map is a self-contained dataset under `src/datasets/<id>/`, registered in `
 
 - **State facts** (capital, largest city, statehood, nickname) were checked against Wikipedia's US state lists.
 - **State flowers and birds** were checked against Wikipedia and [50states.com](https://www.50states.com/).
+- **Fun facts** (three per state) were each checked against the Wikipedia article they link to.
 - **Capital locations** come from Wikidata, and each was confirmed to fall inside its state.
 
 ## Photos
