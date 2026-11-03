@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useDataset } from '../datasets/dataset'
-import { recordAnswer, saveBest, saveRun, statsKindOf, type RunMeta } from '../lib/progress'
+import { progressGeneration, recordAnswer, saveBest, saveRun, statsKindOf, type AttemptProgress, type RunMeta } from '../lib/progress'
 
 /** How many tries it took; `missed` means the answer had to be shown. */
 export type Result = 'first' | 'second' | 'third' | 'missed'
@@ -29,6 +29,24 @@ export function scoreOf(ids: string[], results: Record<string, Result>) {
 
 export type Finish = { ms: number; newBest: boolean }
 
+/** A finished run's outcome, passed to `onFinish` */
+export type FinishedRun = { ms: number; results: Record<string, Result> }
+
+/** Optional hooks into a run, used by the daily challenge */
+export type RunHooks = {
+  /** Called when the user presses Start (not for runs that start by themselves) */
+  onStart?: () => void
+  /**
+   * Called as the run finishes, before it's written to history. Returning (or resolving to) false
+   * records it as practice — e.g. the day's challenge was already finished in another tab.
+   */
+  claim?: (run: FinishedRun) => boolean | Promise<boolean>
+  /** Where to pick up a run that was interrupted (the daily challenge, after a reload) */
+  resume?: AttemptProgress
+  /** Called after every answer and miss, and on pausing, so the run can be resumed from there */
+  onProgress?: (progress: AttemptProgress) => void
+}
+
 /** `user` = pressed Pause; `left` = switched away from the browser window */
 export type PauseReason = 'user' | 'left'
 
@@ -39,15 +57,25 @@ export function useQuizRun(
   active: boolean,
   autoStart: boolean,
   meta: RunMeta,
-  /** Called once the run finishes (e.g. so the toolbar can show a new best score) */
-  onFinish?: () => void,
+  /** Called once the run finishes (e.g. so the toolbar can show a new best score), with how it went */
+  onFinish?: (run: FinishedRun) => void,
+  hooks: RunHooks = {},
 ) {
   const ds = useDataset()
   // The clock only starts when the user starts the quiz (or asked to by restarting).
-  const [start, setStart] = useState<number | null>(() => (autoStart ? Date.now() : null))
-  const begin = () => setStart(Date.now())
+  // A resumed run starts with the time it had already taken.
+  const resumedMs = hooks.resume?.ms ?? 0
+  const [start, setStart] = useState<number | null>(() => (autoStart ? Date.now() - resumedMs : null))
+  // The reset generation the run started in: its answers and result are only saved if progress isn't
+  // reset in the meantime (e.g. from another tab).
+  const [generation, setGeneration] = useState(() => progressGeneration(ds.config.id))
+  const begin = () => {
+    setStart(Date.now() - resumedMs)
+    setGeneration(progressGeneration(ds.config.id))
+    hooks.onStart?.()
+  }
 
-  const [results, setResults] = useState<Record<string, Result>>({})
+  const [results, setResults] = useState<Record<string, Result>>(() => hooks.resume?.results ?? {})
   const [finish, setFinish] = useState<Finish | null>(null)
 
   // Pausing (by the user, or by leaving the browser window) holds the run until the user chooses to resume.
@@ -87,15 +115,25 @@ export function useQuizRun(
     if (start === null || paused || !active || results[id]) return
     const next = { ...results, [id]: result }
     setResults(next)
-    recordAnswer(ds.config.id, id, result === 'first', statsKindOf(meta.mode))
+    recordAnswer(ds.config.id, id, result === 'first', statsKindOf(meta.mode), generation)
 
     if (Object.keys(next).length === ids.length) {
       const ms = Date.now() - start - pausedTotal.current
       const correct = Object.values(next).filter((r) => r === 'first').length
-      const newBest = bestKey ? saveBest(ds.config.id, bestKey, { correct, total: ids.length, ms }) : false
-      saveRun(ds.config.id, { ...meta, ms, results: next })
-      setFinish({ ms, newBest })
-      onFinish?.()
+      // The summary shows at once; "New best" appears once the score is confirmed saved.
+      if (bestKey) {
+        void saveBest(ds.config.id, bestKey, { correct, total: ids.length, ms }, generation).then(
+          (newBest) => newBest && setFinish((f) => f && { ...f, newBest: true }),
+        )
+      }
+      // Settled before writing history, so a run that turned out not to count is recorded as practice.
+      const record = (counts: boolean) =>
+        void saveRun(ds.config.id, { ...meta, practice: meta.practice || !counts, ms, results: next }, generation)
+      const counts = hooks.claim ? hooks.claim({ ms, results: next }) : true
+      if (typeof counts === 'boolean') record(counts)
+      else void counts.then(record, () => record(true))
+      setFinish({ ms, newBest: false })
+      onFinish?.({ ms, results: next })
     }
   }
 

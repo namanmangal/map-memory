@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import { ALL_GROUPS, useDataset } from '../datasets/dataset'
 import type { Place } from '../datasets/types'
-import { loadBest, type RunMeta } from '../lib/progress'
+import { loadBest, useProgress, type RunMeta } from '../lib/progress'
 import { formatTime } from '../lib/util'
+import type { FinishedRun, RunHooks } from './useQuizRun'
 
 export type GameProps = {
   ids: string[]
@@ -17,8 +18,10 @@ export type GameProps = {
   autoStart: boolean
   /** Recorded with the run in the quiz history */
   meta: RunMeta
-  /** Tells the shell a run finished, so the toolbar's best score refreshes */
-  onFinish: () => void
+  /** Tells the shell a run finished (so the toolbar's best score refreshes), with how it went */
+  onFinish: (run: FinishedRun) => void
+  /** Hooks for when the user starts and finishes, used by the daily challenge */
+  hooks?: RunHooks
 }
 
 /** What a quiz asks about each place: its name or its capital */
@@ -27,8 +30,6 @@ export type Ask = 'name' | 'capital'
 /** Props every tab gets; tabs stay mounted when hidden so switching doesn't lose progress */
 export type ModeProps = {
   active: boolean
-  /** Called after progress is reset, so the app can discard in-progress runs on other tabs */
-  onProgressReset: () => void
 }
 
 /**
@@ -52,8 +53,8 @@ export function QuizShell({
   const [practiceIds, setPracticeIds] = useState<string[] | null>(null)
   const [run, setRun] = useState(0)
   const [autoStart, setAutoStart] = useState(false)
-  // Bumped when a run finishes so the "Best" score below is re-read from storage.
-  const [, setFinishedRuns] = useState(0)
+  // Re-reads the best score below whenever saved progress changes (e.g. a run here sets a new best).
+  useProgress()
 
   const canAsk = (id: string) => !eligible || eligible(ds.byId[id])
   const groupIds = ds.idsForGroup(group).filter(canAsk)
@@ -118,7 +119,7 @@ export function QuizShell({
           active,
           autoStart,
           meta: { mode, group, practice: practiceIds !== null },
-          onFinish: () => setFinishedRuns((n) => n + 1),
+          onFinish: () => {},
         })}
       </div>
     </div>

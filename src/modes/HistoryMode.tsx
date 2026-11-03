@@ -1,8 +1,7 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { ALL_GROUPS, useDataset, type LoadedDataset } from '../datasets/dataset'
-import { loadRuns, type RunRecord } from '../lib/progress'
+import { loadRuns, useProgress, type RunRecord } from '../lib/progress'
 import { formatTime } from '../lib/util'
-import type { ModeProps } from './QuizShell'
 import { ResultBreakdown } from './Summary'
 import { MAX_ATTEMPTS, scoreOf } from './useQuizRun'
 
@@ -12,6 +11,7 @@ const QUIZ_LABELS: Record<string, string> = {
   'name-type': 'Name it · Type',
   'name-choose': 'Name it · Choose',
   drag: 'Drag & drop',
+  daily: 'Daily challenge',
   'capital-type': 'Capitals · Type',
   'capital-choose': 'Capitals · Choose',
   'capital-map': 'Capitals · On the map',
@@ -24,8 +24,8 @@ const ALL = 'all'
  * run left with nothing is skipped — so nothing below looks up a place that isn't there. (`hasOwn`,
  * not `in`, so names like "toString" or "__proto__" don't pass as places.)
  */
-function runsFor(ds: LoadedDataset): RunRecord[] {
-  return loadRuns(ds.config.id)
+function runsFor(ds: LoadedDataset, saved: RunRecord[]): RunRecord[] {
+  return saved
     .map((run) => ({ ...run, results: Object.fromEntries(Object.entries(run.results).filter(([id]) => Object.hasOwn(ds.byId, id))) }))
     .filter((run) => Object.keys(run.results).length > 0)
 }
@@ -37,19 +37,16 @@ const quizzesFor = (hasCapitals: boolean) =>
 const dateFormat = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' })
 
 /** Every finished quiz run, newest first, with the full breakdown on demand. */
-export function HistoryMode({ active }: ModeProps) {
+export function HistoryMode() {
   const ds = useDataset()
-  const [runs, setRuns] = useState(() => runsFor(ds))
+  // Runs are saved by quizzes in other tabs of the app (or other browser tabs), sometimes just after
+  // they finish (a daily run once it's settled whether it counted): re-read whenever progress changes.
+  useProgress()
+  const saved = loadRuns(ds.config.id) // a new list only when history changes, so the memo below holds otherwise
+  const runs = useMemo(() => runsFor(ds, saved), [ds, saved])
   const [quiz, setQuiz] = useState(ALL)
   const [group, setGroup] = useState(ALL)
   const [openId, setOpenId] = useState<string | null>(null)
-
-  // Quizzes on other tabs add runs, so re-read history whenever this tab is shown again.
-  const [wasActive, setWasActive] = useState(active)
-  if (active !== wasActive) {
-    setWasActive(active)
-    if (active) setRuns(runsFor(ds))
-  }
 
   const shown = runs.filter((r) => (quiz === ALL || r.mode === quiz) && (group === ALL || r.group === group)).reverse()
   const totalMs = shown.reduce((sum, r) => sum + r.ms, 0)
@@ -60,7 +57,7 @@ export function HistoryMode({ active }: ModeProps) {
       <div className="history empty">
         <h2>No quizzes yet</h2>
         <p className="muted">
-          Finish a quiz in {ds.hasCapitals ? 'Find it, Name it, Drag & drop or Capitals' : 'Find it, Name it or Drag & drop'}{' '}
+          Finish a quiz in {ds.hasCapitals ? 'Daily, Find it, Name it, Drag & drop or Capitals' : 'Daily, Find it, Name it or Drag & drop'}{' '}
           and it'll show up here, with your score, time and every{' '}
           {ds.config.noun.one} you got right or missed.
         </p>
@@ -121,7 +118,10 @@ export function HistoryMode({ active }: ModeProps) {
                   run={run}
                   open={openId === run.id}
                   onToggle={() => setOpenId((o) => (o === run.id ? null : run.id))}
-                  groupLabel={groupLabel(run.group)}
+                  // A daily challenge is a handful of places from the whole map, not a region.
+                  groupLabel={
+                    run.mode === 'daily' ? `${Object.keys(run.results).length} ${ds.config.noun.many}` : groupLabel(run.group)
+                  }
                 />
               ))}
             </tbody>

@@ -5,6 +5,7 @@ A web app for learning maps, starting with the 50 US states.
 ## Modes
 
 - **Explore**: hover a state for its name and capital; click it (or pick it from the A–Z / by-region list) to zoom in and see its capital, facts, a few "Did you know?" fun facts with links to their sources, and four photos: state flag, flower, bird and a famous landmark. Capitals are marked with ★, with names shown for the selected state and once zoomed in. "Color by how well I know them" shades each state by your quiz results.
+- **Daily**: the same 10 states for everyone each day, in the same order: find each on the map (every state is clickable). Your first finished run of the day counts, and each answer is saved as you go: reloading continues the attempt (with its misses and time so far) instead of starting over. An attempt is played in one tab at a time; continuing it in another tab takes it over. You get a 🟩🟨🟧🟥 result to copy and share, and a streak for playing on consecutive days. Replays are practice and don't change the day's result. A new challenge starts at your local midnight.
 - **Find it**: you're given a name; click the state.
 - **Name it**: a state is highlighted; type its name or pick from four options. The wrong options are bordering states where possible, so they're easy to mix up.
 - **Drag & drop**: drag every name onto its state, or tap a name, then tap the state.
@@ -14,8 +15,8 @@ A web app for learning maps, starting with the 50 US states.
 
 ### How quizzes work
 
-- **Starting and timing:** press **Start quiz** to begin. The timer pauses on **Pause**, when you leave the browser window (press **Resume quiz** to continue), and while you're on another tab. Switching tabs keeps your progress.
-- **Regions:** every quiz can be limited to one region, and the map zooms to fit it. Explore and Find it can also be zoomed (scroll, pinch, drag to pan, or the +/− buttons).
+- **Starting and timing:** press **Start quiz** to begin (in Daily, **Start today's challenge**, or **Continue** for one already under way). The timer pauses on **Pause**, when you leave the browser window (press **Resume quiz** to continue), and while you're on another tab. Switching tabs keeps your progress.
+- **Regions:** Find it, Name it, Drag & drop and Capitals can be limited to one region, and the map zooms to fit it. (Daily always uses the day's states, from the whole map.) Explore, Find it, Daily and Capitals' **On the map** style can also be zoomed (scroll, pinch, drag to pan, or the +/− buttons).
 - **Answering:** you get 3 tries per state, and results are colored by try (1st, 2nd, 3rd, didn't get). Typed answers forgive one-letter typos and "St." for "Saint".
 - **Summary:** the end-of-quiz summary shows counts and percentages per try, and offers to practice the states you didn't get on the first try. Practice runs are marked in History and never count as best scores.
 - **Sounds:** right and wrong answers play a sound. Mute with 🔊 in the header.
@@ -24,12 +25,14 @@ A web app for learning maps, starting with the 50 US states.
 ### Settings and saved data
 
 - **Theme:** choose **Light**, **Dark** or **Auto** (follows your system) in the header.
-- **Saved in the browser's localStorage**, so it stays on that device and browser:
-  - per-state results, kept separately for the map quizzes and the Capitals quiz
-  - best scores and quiz history
-  - your theme and mute choice
+- **Saved in the browser**, so it stays on that device and browser:
+  - in IndexedDB: per-state results (kept separately for the map quizzes, including Daily, and the Capitals quiz), best scores, quiz history, daily challenge results (for the streak) and daily challenges in progress (so a reload continues them). Every change is a single transaction, so several open tabs can't overwrite each other's progress, and each tab updates as soon as another saves. Progress saved by older versions (in localStorage) is moved over the first time a map opens.
+  - in localStorage: your theme and mute choice
+  - If the browser won't allow IndexedDB (or another tab is holding it up), the app says so. If saving works again before anything changes, it carries on as normal; once you've answered something in the meantime, that tab keeps its progress in memory only until it's closed or reloaded (switching back would overwrite what you did), and the notice says so.
+  - If saving fails (e.g. storage is full), or a tab can't reload what's saved, the app says so until it works again.
+  - Resetting progress also stops quizzes already under way, in every open tab: they start fresh (the other tabs say why), and nothing from before the reset is saved after it.
 - **Explore coloring** counts the Capitals quiz only while its Capitals checkbox is on. Its note says which quizzes are included.
-- **Reset progress** (in Explore) clears results, best scores and history.
+- **Reset progress** (in Explore) clears results, best scores, history, daily challenge results and daily challenges in progress, all at once.
 
 ## Run
 
@@ -49,7 +52,7 @@ Each map is a self-contained dataset under `src/datasets/<id>/`, registered in `
   - `id` must match the feature id in the map file.
   - `name`, `code` and `group` (region or continent) are required.
   - `capital` and `capitalLocation` (`[longitude, latitude]`) are optional.
-  - `facts` is an optional list of extras shown in Explore.
+  - `facts` is an optional object of extras shown in Explore, label to value, in order: e.g. `{ "Nickname": "Lone Star State", "Statehood": "1845" }`.
   - `funFacts` is an optional list of `{ text, source }` trivia for Explore's "Did you know?" section, where `source` is the page the fact was checked against.
 
   The Capitals quiz, the capital stars and the other capital controls appear only when places have a `capital`. Places without one are left out of the Capitals quiz.

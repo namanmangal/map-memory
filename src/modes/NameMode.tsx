@@ -276,7 +276,7 @@ function NameGame({
             ) : (
               <>
                 {note}
-                {mistakes > 0 && ` · ${MAX_ATTEMPTS - mistakes} tries left`}{' '}
+                {mistakes > 0 && ` · ${MAX_ATTEMPTS - mistakes} ${MAX_ATTEMPTS - mistakes === 1 ? 'try' : 'tries'} left`}{' '}
                 <button className="link" onClick={() => setMistakes(MAX_ATTEMPTS)}>
                   Show answer
                 </button>

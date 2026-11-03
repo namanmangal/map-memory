@@ -3,8 +3,7 @@ import { ALL_GROUPS, useDataset, type LoadedDataset } from '../datasets/dataset'
 import type { Place } from '../datasets/types'
 import { MapView } from '../map/MapView'
 import { PlacePhotos } from '../components/PlacePhotos'
-import type { ModeProps } from './QuizShell'
-import { combineStats, hasProgress, loadAllBest, loadStats, mastery, resetProgress, type Best } from '../lib/progress'
+import { combineStats, hasProgress, loadAllBest, loadStats, mastery, resetProgress, useProgress, type Best } from '../lib/progress'
 
 function masteryClass(m: number | null): string {
   if (m === null) return 'm-unseen'
@@ -57,7 +56,7 @@ function acedIn(ds: LoadedDataset, best: Record<string, Best>, group: string) {
 }
 
 /** Browse the map: hover for names, click for details, optionally color by how well you know each place. */
-export function ExploreMode({ active, onProgressReset }: ModeProps) {
+export function ExploreMode() {
   const ds = useDataset()
   const [selected, setSelected] = useState<string | null>(null)
   const [showLabels, setShowLabels] = useState(true)
@@ -65,20 +64,12 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
   const showCapitals = ds.hasCapitals && capitalsChecked
   const [byMastery, setByMastery] = useState(false)
   const [listOrder, setListOrder] = useState<'group' | 'alpha'>('alpha')
-  const [placeStats, setPlaceStats] = useState(() => loadStats(ds.config.id))
-  const [capitalStats, setCapitalStats] = useState(() => loadStats(ds.config.id, 'capital'))
-  const [best, setBest] = useState(() => loadAllBest(ds.config.id))
+  // Quizzes (in other tabs of the app, or other browser tabs) save as they go: re-render on any change.
+  useProgress()
+  const placeStats = loadStats(ds.config.id)
+  const capitalStats = loadStats(ds.config.id, 'capital')
+  const best = loadAllBest(ds.config.id)
   const [resetFailed, setResetFailed] = useState(false)
-  // Quizzes on other tabs record new stats, so re-read them whenever this tab is shown again.
-  const [wasActive, setWasActive] = useState(active)
-  if (active !== wasActive) {
-    setWasActive(active)
-    if (active) {
-      setPlaceStats(loadStats(ds.config.id))
-      setCapitalStats(loadStats(ds.config.id, 'capital'))
-      setBest(loadAllBest(ds.config.id))
-    }
-  }
   const [group, setGroup] = useState(ALL_GROUPS)
   const [zoomTarget, setZoomTarget] = useState<{ id?: string; nonce: number; levelOf?: string[] } | null>(null)
   const changeGroup = (next: string) => {
@@ -152,7 +143,9 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
           // Stats are recorded per answer, unlike History, which only keeps finished quizzes.
           <span className="legend-note">
             Based on every answer you've given in{' '}
-            {showCapitals ? 'the map quizzes and the Capitals quiz' : 'the map quizzes (Find it, Name it, Drag & drop)'},
+            {showCapitals
+              ? 'the map quizzes (including Daily) and the Capitals quiz'
+              : 'the map quizzes (Daily, Find it, Name it, Drag & drop)'},
             including ones you didn't finish.
             {!showCapitals && ' Turn on Capitals to include the Capitals quiz.'}
           </span>
@@ -310,15 +303,11 @@ export function ExploreMode({ active, onProgressReset }: ModeProps) {
             className="link danger"
             disabled={!hasProgress(ds.config.id)}
             title={hasProgress(ds.config.id) ? undefined : 'Nothing to reset yet'}
-            onClick={() => {
+            onClick={async () => {
               if (confirm(`Reset all progress and quiz history for ${ds.config.title}?`)) {
-                const cleared = resetProgress(ds.config.id)
-                // Show what's actually stored now, rather than assuming the reset worked.
-                setPlaceStats(loadStats(ds.config.id))
-                setCapitalStats(loadStats(ds.config.id, 'capital'))
-                setBest(loadAllBest(ds.config.id))
+                // The other tabs start fresh once it's done (the app watches for resets; see App).
+                const cleared = await resetProgress(ds.config.id)
                 setResetFailed(!cleared)
-                onProgressReset()
               }
             }}
           >
