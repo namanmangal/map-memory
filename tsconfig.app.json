@@ -23,5 +23,7 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Unit tests run in Node, so they are checked with the other tests (tsconfig.test.json)
+  "exclude": ["src/**/*.test.ts"]
 }
