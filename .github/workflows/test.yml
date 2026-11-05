@@ -1,0 +1,33 @@
+# Lints and runs the unit and smoke tests on every push and pull request.
+name: Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
+      # Uses the Google Chrome already installed on GitHub's Ubuntu runners (see playwright.config.ts).
+      - run: npm run test:smoke
+
+      # On failure, keep Playwright's record of what happened (traces, screenshots) for a week.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: test-results
+          retention-days: 7

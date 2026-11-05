@@ -44,6 +44,25 @@ npm run lint     # oxlint
 npm run preview  # serve the built app
 ```
 
+## Test
+
+```sh
+npm test            # unit tests (Vitest), about a second
+npm run test:smoke  # smoke tests (Playwright) in Chrome, about 10 seconds
+npm run test:all    # both
+npm run test:watch  # unit tests, rerun on every change
+```
+
+- **Unit tests** (`src/**/*.test.ts`) check the app's logic directly:
+  - the daily challenge's picks, streaks and dates
+  - typed-answer matching
+  - saved progress, run against an in-memory IndexedDB: saving and reloading, best scores, the daily challenge's rules (first result wins, takeovers), reset, moving old localStorage progress, and working without IndexedDB
+- **Smoke tests** (`e2e/`) play through the main flows in the built app: every tab, Explore's details, each quiz, the daily challenge (reload, finish, share, reset), and two open tabs (taking over a daily challenge, progress showing in the other tab).
+  - They build the app first and serve it on port 4790.
+  - They use the Chrome installed on your machine, so there's no browser to download.
+  - Photos (from Wikimedia) are blocked during the tests. Any other console error fails a test, including a resource that fails to load.
+- **On GitHub:** `.github/workflows/test.yml` runs lint, the unit tests and the smoke tests on every push and pull request. Results show on the repo's **Actions** tab, and if a smoke test fails, its screenshots and trace are attached to that run.
+
 ## Adding another map (e.g. world countries)
 
 Each map is a self-contained dataset under `src/datasets/<id>/`, registered in `src/datasets/registry.ts`. A map picker appears once there's more than one. Shapes, places and photos load only when that map is opened.

@@ -3,7 +3,8 @@ import { useDataset, type LoadedDataset } from '../datasets/dataset'
 import type { Place } from '../datasets/types'
 import { MapView } from '../map/MapView'
 import { playSound } from '../lib/sound'
-import { levenshtein, normalize, shuffle } from '../lib/util'
+import { canonical, checkTyped } from '../lib/answers'
+import { shuffle } from '../lib/util'
 import { FindGame } from './FindMode'
 import { QuizShell, type Ask, type GameProps, type ModeProps } from './QuizShell'
 import { QuizPaused, QuizStart } from './QuizStart'
@@ -97,24 +98,6 @@ function choicesFor(ds: LoadedDataset, id: string, ask: Ask): string[] {
     }
   }
   return shuffle([id, ...picked])
-}
-
-type Check = 'right' | 'typo' | 'wrong'
-
-/** "St. Paul" and "Saint Paul" count as the same answer. */
-const canonical = (text: string) => normalize(text).replace(/\bst\b/g, 'saint')
-
-/**
- * Exact (ignoring case, punctuation and "St."/"Saint") is right; one letter off is a forgiven typo
- * for answers of 4+ letters (so Ohio, Iowa, Utah, Boise count) — unless what was typed is exactly
- * another place's answer, which is a real mistake, not a typo.
- */
-function checkTyped(answer: string, name: string, others: Set<string>, code?: string): Check {
-  const a = canonical(answer)
-  const n = canonical(name)
-  if (a === n || (code && a === code.toLowerCase())) return 'right'
-  if (n.length >= 4 && levenshtein(a, n) === 1 && !others.has(a)) return 'typo'
-  return 'wrong'
 }
 
 function NameGame({
