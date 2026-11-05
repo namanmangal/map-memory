@@ -28,11 +28,18 @@ test('can be installed: a manifest with name, start page and icons', async ({ pa
   }
 })
 
-test('works offline after the first visit: the map, Explore and a quiz', async ({ page, context }) => {
-  await openApp(page)
-  await installed(page)
+test('works offline after the first visit: the map, Explore and a quiz', async ({ page }) => {
+  // Offline is the site's server going away: browsers' offline modes differ (Firefox's blocks the page
+  // before the service worker can answer), but a lost connection looks the same to all of them.
+  const server = await serveBuild()
+  try {
+    await page.goto(server.url)
+    await expect(page.locator('path[data-place-id]').first()).toBeAttached()
+    await installed(page)
+  } finally {
+    await server.close()
+  }
 
-  await context.setOffline(true)
   await page.reload()
   await expect(page.locator('path[data-place-id]').first()).toBeAttached()
   await clickState(page, '#panel-explore', '06')
@@ -118,6 +125,11 @@ async function serveBuild() {
     set version(v: number) {
       state.version = v
     },
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    /** Stops the server, dropping open connections too, so the site is really gone */
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve())
+        server.closeAllConnections()
+      }),
   }
 }

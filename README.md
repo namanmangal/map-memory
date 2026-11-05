@@ -65,6 +65,7 @@ The smoke tests need Playwright's WebKit, installed once after `npm install`: `n
 - **Unit tests** (`src/**/*.test.ts`) check the app's logic directly:
   - the daily challenge's picks, streaks and dates
   - typed-answer matching
+  - answer sounds staying silent, without errors, when the browser won't start audio
   - saved progress, run against an in-memory IndexedDB: saving and reloading, best scores, the daily challenge's rules (first result wins, takeovers), reset, moving old localStorage progress, and working without IndexedDB
 - **Smoke tests** (`e2e/`) play through the main flows in the built app: every tab, Explore's details, each quiz, the daily challenge (reload, finish, share or copy by hand, reset), and two open tabs (taking over a daily challenge, progress showing in the other tab).
   - **Accessibility:** every tab, each quiz in each answer style, and the result screens are scanned with [axe](https://github.com/dequelabs/axe-core) against WCAG 2.1 A and AA, in both themes. Any problem (low contrast, a missing label, and so on) fails the test and names the element.
