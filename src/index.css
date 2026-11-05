@@ -2,7 +2,8 @@
   --bg: #f6f5f1;
   --surface: #ffffff;
   --text: #1d1c1a;
-  --muted: #6f6b63;
+  /* Secondary text: at least 4.5:1 (WCAG AA) on every background here, including --accent-soft */
+  --muted: #6c6860;
   --border: #dedad2;
   --accent: #2f5bd3;
   --accent-soft: #e3eafb;
@@ -49,7 +50,7 @@
   --bg: #161614;
   --surface: #201f1c;
   --text: #ecebe6;
-  --muted: #9c978c;
+  --muted: #a29d92;
   --border: #3a3833;
   --accent: #7c9cf0;
   --accent-soft: #263257;
@@ -889,7 +890,6 @@ h1 {
 /* ---------- Drag & drop ---------- */
 
 .tray {
-  list-style: none;
   margin: 0;
   padding: 10px;
   display: flex;

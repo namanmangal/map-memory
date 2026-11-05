@@ -18,6 +18,7 @@ import {
 } from './lib/progress'
 import { setMuted, useMuted } from './lib/sound'
 import { setThemePref, useThemePref, type ThemePref } from './lib/theme'
+import { UpdateNotice } from './components/UpdateNotice'
 
 const MODES = [
   { id: 'explore', label: 'Explore', Component: ExploreMode },
@@ -145,6 +146,7 @@ export default function App() {
       </header>
 
       <main>
+        <UpdateNotice />
         {error ? (
           <div className="error">
             <p>Couldn't load the map: {error}</p>

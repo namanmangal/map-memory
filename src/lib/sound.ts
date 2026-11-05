@@ -53,7 +53,9 @@ function audio(): AudioContext | null {
       return null // Web Audio unsupported — stay silent
     }
   }
-  if (ctx.state === 'suspended') void ctx.resume()
+  // Resuming can fail: the browser may not allow audio yet, or (Firefox) the page is being left. The
+  // sound then just doesn't play; left unhandled, the failure would show as an error.
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {})
   return ctx
 }
 

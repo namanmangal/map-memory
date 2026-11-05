@@ -1,8 +1,11 @@
-# Lints and runs the unit and smoke tests on every push and pull request.
+# Lints and runs the unit and smoke tests on pushes to main and on every pull request.
 name: Test
 
 on:
+  # Pushes to main, and every pull request (including Dependabot's). Not pushes to other branches as
+  # well, which would test a pull request's changes twice.
   push:
+    branches: [main]
   pull_request:
 
 jobs:
@@ -21,7 +24,10 @@ jobs:
       - run: npm run lint
       - run: npm test
 
-      # Uses the Google Chrome already installed on GitHub's Ubuntu runners (see playwright.config.ts).
+      # Chrome is already installed on GitHub's Ubuntu runners; Firefox and WebKit (Safari's engine)
+      # are Playwright's own builds, plus the system libraries they need.
+      - run: npx playwright install --with-deps firefox webkit
+      # Runs in all three browsers (GitHub sets CI, which turns Firefox on; see playwright.config.ts).
       - run: npm run test:smoke
 
       # On failure, keep Playwright's record of what happened (traces, screenshots) for a week.

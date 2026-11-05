@@ -1,0 +1,30 @@
+# Dependabot: once a month, opens pull requests to update the npm packages and the actions the
+# workflows use. The tests run on each one; nothing changes until it's merged.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    # Only versions out for a week: most broken or hijacked releases are found and pulled by then.
+    # (Security fixes, switched on in the repo's settings, aren't held back.)
+    cooldown:
+      default-days: 7
+    groups:
+      # Minor and patch updates together in one pull request; each major version gets its own,
+      # since that's where changes that break things usually are.
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      # As for npm: minor and patch updates together, and each major version on its own, since a new
+      # major version of an action can rename or drop the settings the workflow uses.
+      actions-minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
