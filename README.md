@@ -22,9 +22,16 @@ A web app for learning maps, starting with the 50 US states.
 - **Sounds:** right and wrong answers play a sound. Mute with 🔊 in the header.
 - **Keyboard:** Tab to a state and press Enter to pick it. In Drag & drop, press Enter on a name, then Enter on its state.
 
+### Install and play offline
+
+- **Install:** the app can be installed like an app. In Chrome or Edge, use the install button in the address bar. On an iPhone or iPad, open it in Safari and choose **Share → Add to Home Screen**; on Android, **Install app** in Chrome's menu. It then opens in its own window with its own icon.
+- **Offline:** after the first visit, the whole app (every map, quiz, Daily and History) works without a connection. Photos come from Wikimedia, so they show only when online; without a connection Explore just leaves them out.
+- **New versions:** when a new version has been published, the app says so, with **Reload** and **Later**. It never reloads by itself, since that would end a quiz in progress. If you choose Later, the new version takes over the next time the app is opened. An open app checks for a new version every hour.
+- This needs the site to be served over HTTPS (or from localhost, as with `npm run preview`).
+
 ### Settings and saved data
 
-- **Theme:** choose **Light**, **Dark** or **Auto** (follows your system) in the header.
+- **Theme:** choose **Light**, **Dark** or **Auto** (follows your system) in the header. The browser's bar (or the installed app's title bar) matches it.
 - **Saved in the browser**, so it stays on that device and browser:
   - in IndexedDB: per-state results (kept separately for the map quizzes, including Daily, and the Capitals quiz), best scores, quiz history, daily challenge results (for the streak) and daily challenges in progress (so a reload continues them). Every change is a single transaction, so several open tabs can't overwrite each other's progress, and each tab updates as soon as another saves. Progress saved by older versions (in localStorage) is moved over the first time a map opens.
   - in localStorage: your theme and mute choice
@@ -48,20 +55,34 @@ npm run preview  # serve the built app
 
 ```sh
 npm test            # unit tests (Vitest), about a second
-npm run test:smoke  # smoke tests (Playwright) in Chrome, about 10 seconds
+npm run test:smoke  # smoke tests (Playwright) in Chrome and WebKit, about a minute and a half
 npm run test:all    # both
 npm run test:watch  # unit tests, rerun on every change
 ```
+
+The smoke tests need Playwright's WebKit, installed once after `npm install`: `npx playwright install webkit`. Firefox is needed only for the opt-in Firefox run (see below): `npx playwright install firefox`. To run just one browser, add `-- --project=chrome` (or `webkit`, or `firefox` when it's turned on).
 
 - **Unit tests** (`src/**/*.test.ts`) check the app's logic directly:
   - the daily challenge's picks, streaks and dates
   - typed-answer matching
   - saved progress, run against an in-memory IndexedDB: saving and reloading, best scores, the daily challenge's rules (first result wins, takeovers), reset, moving old localStorage progress, and working without IndexedDB
-- **Smoke tests** (`e2e/`) play through the main flows in the built app: every tab, Explore's details, each quiz, the daily challenge (reload, finish, share, reset), and two open tabs (taking over a daily challenge, progress showing in the other tab).
+- **Smoke tests** (`e2e/`) play through the main flows in the built app: every tab, Explore's details, each quiz, the daily challenge (reload, finish, share or copy by hand, reset), and two open tabs (taking over a daily challenge, progress showing in the other tab).
+  - **Accessibility:** every tab, each quiz in each answer style, and the result screens are scanned with [axe](https://github.com/dequelabs/axe-core) against WCAG 2.1 A and AA, in both themes. Any problem (low contrast, a missing label, and so on) fails the test and names the element.
+  - **Install and offline:** the manifest and icons, playing offline after a first visit, and a new version (the notice, Later, and Reload switching to it).
+  - **Browsers:** Chrome (the one installed on your machine), WebKit (Safari's engine) and Firefox. Playwright's Firefox doesn't start on macOS 27, so on a computer it runs only when asked (`SMOKE_FIREFOX=1 npm run test:smoke`); GitHub Actions always runs it. WebKit is close to Safari but not the same, so it's still worth a check on a real iPhone now and then.
   - They build the app first and serve it on port 4790.
-  - They use the Chrome installed on your machine, so there's no browser to download.
   - Photos (from Wikimedia) are blocked during the tests. Any other console error fails a test, including a resource that fails to load.
-- **On GitHub:** `.github/workflows/test.yml` runs lint, the unit tests and the smoke tests on every push and pull request. Results show on the repo's **Actions** tab, and if a smoke test fails, its screenshots and trace are attached to that run.
+- **On GitHub:** `.github/workflows/test.yml` runs lint, the unit tests and the smoke tests (in all three browsers) on every push to `main` and every pull request. Results show on the repo's **Actions** tab, and if a smoke test fails, its screenshots and trace are attached to that run.
+
+## Dependency updates
+
+`.github/dependabot.yml` has Dependabot check once a month for new versions of the npm packages and of the actions the workflow uses, and open pull requests for them, which the tests then run on:
+
+- For both the npm packages and the actions, minor and patch updates come together in one pull request, and each major version comes in its own, since those are the ones most likely to need changes.
+- Only versions released at least a week earlier are proposed, so a broken or hijacked release is usually pulled before it reaches here.
+- Nothing changes until a pull request is merged. Merge one when its tests pass; if they fail, the update needs changes here first.
+
+Security fixes are separate: with **Dependabot alerts** and **Dependabot security updates** on (in the repo's **Settings → Advanced Security**), known vulnerabilities get their own pull requests straight away.
 
 ## Adding another map (e.g. world countries)
 

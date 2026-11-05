@@ -27,3 +27,10 @@ test("Explore shows a state's capital, facts and fun facts", async ({ page }) =>
     await expect(link).toHaveAttribute('aria-label', /^Source: .+ \(Wikipedia\)$/)
   }
 })
+
+test("the browser's bar matches the page, in either theme", async ({ page }) => {
+  await openApp(page)
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#f6f5f1')
+  await page.getByRole('button', { name: 'Dark theme' }).click()
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#161614')
+})

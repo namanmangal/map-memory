@@ -201,9 +201,10 @@ function DragGame({ ids, focusIds, bestKey, onRestart, active: tabActive, autoSt
           ariaLabelFor={(id) => (results[id] ? `${ds.byId[id].name} (placed)` : 'Unanswered state')}
         />
         {live && !finish && (
-          <ul className="tray" aria-label={`${ds.config.noun.many} to place`}>
+          // A labeled group of buttons, not a list: each name is a button, so it can't also be a list item.
+          <div className="tray" role="group" aria-label={`${ds.config.noun.many} to place`}>
             {remaining.map((id) => (
-              <li
+              <div
                 key={id}
                 className={[
                   'chip',
@@ -233,9 +234,9 @@ function DragGame({ ids, focusIds, bestKey, onRestart, active: tabActive, autoSt
                 }}
               >
                 {ds.byId[id].name}
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </div>
 

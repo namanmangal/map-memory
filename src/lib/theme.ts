@@ -26,6 +26,9 @@ function read(): ThemePref {
 function apply() {
   const dark = pref === 'dark' || (pref === 'system' && media.matches)
   document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+  // The browser's bar (or the installed app's title bar) matches the page background
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
+  if (bg) document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bg)
 }
 
 media.addEventListener('change', () => {
