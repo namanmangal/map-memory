@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { DailyRecord } from './progress'
 
 // Saved progress, tested against an in-memory IndexedDB. Each test starts with an empty database and
@@ -60,14 +60,22 @@ describe('answers, best scores and history', () => {
     expect(await progress.saveBest(DS, 'find:West', { correct: 8, total: 9, ms: 5000 }, gen())).toBe(true)
   })
 
-  it('adds runs to history in order', async () => {
+  it('adds runs to history in order, even when they finish in the same millisecond', async () => {
+    // Freeze the clock (only Date, so IndexedDB's timers still run) so both runs finish at the same moment
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-03-01T12:00:00Z') })
+    onTestFinished(() => {
+      vi.useRealTimers()
+    })
     await progress.saveRun(DS, { mode: 'find', group: 'All', practice: false, ms: 1, results: { '06': 'first' } }, gen())
     await progress.saveRun(DS, { mode: 'drag', group: 'West', practice: true, ms: 2, results: { '06': 'missed' } }, gen())
     await reopen()
-    expect(progress.loadRuns(DS).map((r) => [r.mode, r.practice])).toEqual([
+    const runs = progress.loadRuns(DS)
+    expect(runs.map((r) => [r.mode, r.practice])).toEqual([
       ['find', false],
       ['drag', true],
     ])
+    // The order must come from the times, not from the random part of the ids, which could go either way
+    expect(Date.parse(runs[1].date)).toBeGreaterThan(Date.parse(runs[0].date))
   })
 })
 

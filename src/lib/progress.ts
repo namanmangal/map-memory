@@ -595,10 +595,15 @@ export async function saveBest(datasetId: string, key: string, result: Best, gen
   return better.ok && better.value
 }
 
+/** When this tab last saved a run, so runs saved within the same millisecond still get distinct times in order */
+let lastRunTime = 0
+
 /** Adds a finished run to history, dropping the oldest beyond MAX_RUNS. */
 export async function saveRun(datasetId: string, run: Omit<RunRecord, 'id' | 'date'>, generation: number): Promise<void> {
-  const now = new Date()
-  // Ids sort in time order; the random part keeps them unique when two tabs finish in the same millisecond.
+  // History is sorted by time, and the oldest runs are dropped first, so each run in this tab is at least
+  // 1 ms after the last. The random part keeps ids unique when two tabs finish in the same millisecond.
+  lastRunTime = Math.max(Date.now(), lastRunTime + 1)
+  const now = new Date(lastRunTime)
   const entry: RunRecord = { ...run, id: `r_${now.getTime()}_${Math.random().toString(36).slice(2, 8)}`, date: now.toISOString() }
   const db = await getDb()
   if (!db) {
