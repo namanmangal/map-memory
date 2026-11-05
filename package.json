@@ -15,8 +15,8 @@
   },
   "dependencies": {
     "d3-geo": "^3.1.1",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "topojson-client": "^3.1.0",
     "us-atlas": "^3.0.1"
   },
@@ -32,7 +32,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "fake-indexeddb": "^6.2.7",
     "happy-dom": "^21.0.4",
-    "oxlint": "^1.81.0",
+    "oxlint": "^1.90.0",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
     "vite-plugin-pwa": "^2.0.0",
